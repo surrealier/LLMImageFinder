@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# uv / venv
+.venv/
+
+# app artifacts (should never be committed)
+sample_dataset/
+_crops/
+*.log
+dist/
+build/
+
+# OS
+Thumbs.db
+.DS_Store
