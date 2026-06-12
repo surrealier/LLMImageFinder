@@ -1,35 +1,55 @@
-"""Modal lightbox: zoom/pan + ←/→ navigation through a folder's member images."""
+"""Modal lightbox: zoom/pan, ←/→ navigation, YOLO label overlay, hit metadata."""
 
 from __future__ import annotations
 
 import os
-from typing import Sequence
+from typing import Callable, Optional, Sequence
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QImageReader, QPainter, QPixmap
+from PySide6.QtCore import QEvent, QRectF, Qt
+from PySide6.QtGui import QBrush, QColor, QImageReader, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QDialog,
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsSimpleTextItem,
     QGraphicsView,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
-    QDialog,
 )
 
+from imgsearch.index import labels
 from imgsearch.ui import icons
 from imgsearch.ui.osutil import reveal_in_explorer
 
 
+def _class_color(cid: int) -> QColor:
+    return QColor.fromHsv((int(cid) * 57) % 360, 200, 255)
+
+
 class ImageViewer(QDialog):
-    def __init__(self, image_paths: Sequence[str], start_index: int = 0, parent=None) -> None:
+    # remembered across viewer instances within the session
+    show_boxes = True
+
+    def __init__(
+        self,
+        image_paths: Sequence[str],
+        start_index: int = 0,
+        parent=None,
+        class_names: Optional[dict] = None,
+        meta_provider: Optional[Callable[[str], str]] = None,
+    ) -> None:
         super().__init__(parent)
         self.paths = [p for p in image_paths if p]
         if not self.paths:
             self.paths = [""]
         self.i = max(0, min(start_index, len(self.paths) - 1))
         self._fit_mode = True
+        self._class_names = dict(class_names or {})
+        self._meta_provider = meta_provider
+        self._box_items: list = []
 
         self.setWindowTitle("이미지 보기")
         self.resize(960, 720)
@@ -44,10 +64,20 @@ class ImageViewer(QDialog):
         self.view.setDragMode(QGraphicsView.ScrollHandDrag)
         self.view.setBackgroundBrush(Qt.black)
         self.view.setAlignment(Qt.AlignCenter)
+        # the viewport consumes wheel events for scrolling once zoomed in —
+        # intercept them there so the wheel ALWAYS zooms (see eventFilter)
+        self.view.viewport().installEventFilter(self)
         self.pix_item = QGraphicsPixmapItem()
         self.pix_item.setTransformationMode(Qt.SmoothTransformation)
         self.scene.addItem(self.pix_item)
         root.addWidget(self.view, 1)
+
+        self.meta_label = QLabel("")
+        self.meta_label.setWordWrap(True)
+        self.meta_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.meta_label.setStyleSheet("color:#9fb2c8; padding:2px 4px;")
+        self.meta_label.setVisible(False)
+        root.addWidget(self.meta_label)
 
         bar = QHBoxLayout()
         self.prev_btn = QPushButton(icons.prev(), "")
@@ -59,6 +89,13 @@ class ImageViewer(QDialog):
         self.next_btn.setToolTip("다음 (→)")
         self.next_btn.clicked.connect(self.next)
         bar.addWidget(self.next_btn)
+
+        self.boxes_btn = QPushButton(icons.tags(), " 라벨")
+        self.boxes_btn.setCheckable(True)
+        self.boxes_btn.setChecked(ImageViewer.show_boxes)
+        self.boxes_btn.setToolTip("YOLO 라벨 박스 표시/숨김 (B)")
+        self.boxes_btn.toggled.connect(self._on_boxes_toggled)
+        bar.addWidget(self.boxes_btn)
 
         bar.addStretch(1)
         self.counter = QLabel("")
@@ -111,6 +148,54 @@ class ImageViewer(QDialog):
         self.counter.setText(f"{self.i + 1} / {len(self.paths)}   —   {os.path.basename(path)}")
         self.prev_btn.setEnabled(len(self.paths) > 1)
         self.next_btn.setEnabled(len(self.paths) > 1)
+        self._refresh_boxes()
+        self._refresh_meta(path)
+
+    def _refresh_meta(self, path: str) -> None:
+        meta = ""
+        if self._meta_provider is not None:
+            try:
+                meta = self._meta_provider(path) or ""
+            except Exception:
+                meta = ""
+        self.meta_label.setText(meta)
+        self.meta_label.setVisible(bool(meta))
+        self.meta_label.setToolTip(path)
+
+    # --- YOLO label overlay ---
+    def _clear_boxes(self) -> None:
+        for item in self._box_items:
+            self.scene.removeItem(item)
+        self._box_items = []
+
+    def _refresh_boxes(self) -> None:
+        self._clear_boxes()
+        path = self.paths[self.i]
+        pm = self.pix_item.pixmap()
+        label_path = labels.label_path_for(path) if path else None
+        self.boxes_btn.setEnabled(label_path is not None)
+        if not ImageViewer.show_boxes or label_path is None or pm.isNull():
+            return
+        w, h = pm.width(), pm.height()
+        for cid, cx, cy, bw, bh in labels.parse_yolo(label_path):
+            # normalized YOLO coords -> displayed-pixmap coords, so the overlay is
+            # correct even though _read_bounded may decode at reduced resolution
+            rect = QRectF((cx - bw / 2) * w, (cy - bh / 2) * h, bw * w, bh * h)
+            color = _class_color(cid)
+            box = QGraphicsRectItem(rect, self.pix_item)
+            pen = QPen(color, 2)
+            pen.setCosmetic(True)  # constant on-screen width at any zoom
+            box.setPen(pen)
+            name = str(self._class_names.get(str(cid), f"#{cid}"))
+            text = QGraphicsSimpleTextItem(name, box)  # child: removed with its box
+            text.setBrush(QBrush(color))
+            text.setFlag(QGraphicsSimpleTextItem.ItemIgnoresTransformations)
+            text.setPos(rect.x(), max(0.0, rect.y() - 2))
+            self._box_items.append(box)
+
+    def _on_boxes_toggled(self, checked: bool) -> None:
+        ImageViewer.show_boxes = bool(checked)
+        self._refresh_boxes()
 
     def show_index(self, i: int) -> None:
         if not self.paths:
@@ -135,6 +220,13 @@ class ImageViewer(QDialog):
         self._fit_mode = False
         self.view.scale(factor, factor)
 
+    def eventFilter(self, obj, event):  # noqa: N802
+        # zoom on wheel even when the zoomed-in view would otherwise scroll
+        if obj is self.view.viewport() and event.type() == QEvent.Wheel:
+            self.zoom(1.2 if event.angleDelta().y() > 0 else 1 / 1.2)
+            return True
+        return super().eventFilter(obj, event)
+
     def wheelEvent(self, event) -> None:  # noqa: N802
         self.zoom(1.2 if event.angleDelta().y() > 0 else 1 / 1.2)
 
@@ -157,6 +249,8 @@ class ImageViewer(QDialog):
             self.zoom(0.8)
         elif key == Qt.Key_F:
             self.fit()
+        elif key == Qt.Key_B:
+            self.boxes_btn.toggle()
         else:
             super().keyPressEvent(event)
 

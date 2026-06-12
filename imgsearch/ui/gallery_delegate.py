@@ -16,11 +16,16 @@ SCORE_ROLE = Qt.UserRole + 4
 MEMBERS_ROLE = Qt.UserRole + 5
 HIT_ROLE = Qt.UserRole + 6
 PATH_ROLE = Qt.UserRole + 7
+FAILED_ROLE = Qt.UserRole + 8  # thumbnail could not be generated (file gone/corrupt)
 
 TILE_W = 224
 TILE_H = 250
 _THUMB_H = 176
 _PAD = 8
+# the fixed pixel box a thumbnail is painted into (tile rect is adjusted by ±5):
+# pixmaps are pre-scaled to this size at delivery so paint() is a plain blit
+THUMB_BOX_W = TILE_W - 10 - 2 * _PAD
+THUMB_BOX_H = _THUMB_H
 
 
 class GalleryDelegate(QStyledItemDelegate):
@@ -46,10 +51,14 @@ class GalleryDelegate(QStyledItemDelegate):
         thumb = QRect(rect.x() + _PAD, rect.y() + _PAD, rect.width() - 2 * _PAD, _THUMB_H)
         pm = index.data(PIXMAP_ROLE)
         if isinstance(pm, QPixmap) and not pm.isNull():
-            scaled = pm.scaled(thumb.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            x = thumb.x() + (thumb.width() - scaled.width()) // 2
-            y = thumb.y() + (thumb.height() - scaled.height()) // 2
-            painter.drawPixmap(x, y, scaled)
+            if pm.width() > thumb.width() or pm.height() > thumb.height():
+                pm = pm.scaled(thumb.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            x = thumb.x() + (thumb.width() - pm.width()) // 2
+            y = thumb.y() + (thumb.height() - pm.height()) // 2
+            painter.drawPixmap(x, y, pm)
+        elif index.data(FAILED_ROLE):
+            painter.setPen(QColor("#f59e0b"))
+            painter.drawText(thumb, Qt.AlignCenter, "썸네일 표시 불가\n(파일 확인 필요)")
         else:
             painter.setPen(QColor("#5b6675"))
             painter.drawText(thumb, Qt.AlignCenter, "이미지 로딩…")

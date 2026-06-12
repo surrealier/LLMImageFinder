@@ -50,3 +50,14 @@ class IndexProgress:
     total: int
     phase: str  # "scan" | "index" | "done" | "cancelled"
     folder: str = ""
+
+
+@dataclass
+class BuildReport:
+    """Outcome of an index build: how much was written, skipped, and pruned."""
+
+    n_written: int = 0
+    total: int = 0
+    skipped: list[tuple[str, str]] = field(default_factory=list)  # (path, error)
+    pruned: int = 0  # records whose files vanished from disk
+    cancelled: bool = False

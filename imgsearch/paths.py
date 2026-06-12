@@ -20,6 +20,8 @@ _DIRS = PlatformDirs(appname="ImgSearch", appauthor="MarkAny")
 class AppPaths:
     config_file: Path
     class_names_file: Path  # user-editable YAML (id -> name), lives next to config
+    history_file: Path  # recent search queries (JSON list)
+    index_meta_file: Path  # last build info (when/what/how long), next to chroma
     chroma_dir: Path
     thumbs_dir: Path
     logs_dir: Path
@@ -33,15 +35,20 @@ def app_paths() -> AppPaths:
         return AppPaths(
             config_file=root / "config.json",
             class_names_file=root / "class_names.yaml",
+            history_file=root / "history.json",
+            index_meta_file=root / "index_meta.json",
             chroma_dir=root / "chroma",
             thumbs_dir=root / "thumbs",
             logs_dir=root / "logs",
         )
     cfg_dir = Path(_DIRS.user_config_dir)
+    data_dir = Path(_DIRS.user_data_dir)
     return AppPaths(
         config_file=cfg_dir / "config.json",
         class_names_file=cfg_dir / "class_names.yaml",
-        chroma_dir=Path(_DIRS.user_data_dir) / "chroma",
+        history_file=cfg_dir / "history.json",
+        index_meta_file=data_dir / "index_meta.json",
+        chroma_dir=data_dir / "chroma",
         thumbs_dir=Path(_DIRS.user_cache_dir) / "thumbs",
         logs_dir=Path(_DIRS.user_log_dir),
     )

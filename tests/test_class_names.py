@@ -127,8 +127,8 @@ def test_refresh_preserves_stored_mtime_so_changed_files_still_reembed(tmp_path)
     assert store.existing_mtimes() == mtimes_at_build
 
     # the next incremental build re-embeds exactly the changed file
-    written = idx.build(str(root), full_rebuild=False)
-    assert written == 1
+    report = idx.build(str(root), full_rebuild=False)
+    assert report.n_written == 1
 
 
 def test_refresh_leaves_unlabeled_records_untouched(tmp_path):
@@ -172,14 +172,14 @@ def test_label_edit_invalidates_incremental_skip(tmp_path):
     store = ChromaStore(tmp_path / "chroma")
     idx = Indexer(emb, cap, store, cfg)
     idx.build(str(root), full_rebuild=True)
-    assert idx.build(str(root), full_rebuild=False) == 0  # clean skip
+    assert idx.build(str(root), full_rebuild=False).n_written == 0  # clean skip
 
     # re-annotate one label file (image untouched) -> must re-process that record
     label = next((root / "folderA").glob("im1.txt"))
     label.write_text("0 0.4 0.4 0.2 0.2\n0 0.6 0.6 0.2 0.2\n")
     t = time.time() + 100
     os.utime(label, (t, t))
-    assert idx.build(str(root), full_rebuild=False) == 1
+    assert idx.build(str(root), full_rebuild=False).n_written == 1
 
 
 def test_refresh_requires_image_granularity(tmp_path):

@@ -45,6 +45,9 @@ class SettingsDialog(QDialog):
         self.granularity.addItem("폴더당 대표 1장 (유사 장면 폴더)", "folder")
         self.granularity.addItem("이미지별 개별 색인 (다양한 사진)", "image")
         self.granularity.setCurrentIndex(1 if self._cfg.index_granularity == "image" else 0)
+        self.granularity.setToolTip(
+            "변경하면 기존 인덱스와 호환되지 않아 전체 재빌드가 필요합니다."
+        )
         ds_form.addRow("색인 단위", self.granularity)
         root.addWidget(ds_box)
 
@@ -59,9 +62,14 @@ class SettingsDialog(QDialog):
         self.embedder_device.addItems(["auto", "cpu", "cuda"])
         self.embedder_device.setCurrentText(self._cfg.embedder_device)
         self.embed_dim = QSpinBox()
-        self.embed_dim.setRange(64, 2048)
+        # jina-clip-v2's Matryoshka range is 64..1024 — larger values would fail
+        # the model load at next startup and silently drop the app to mock mode
+        self.embed_dim.setRange(64, 1024)
         self.embed_dim.setSingleStep(64)
-        self.embed_dim.setValue(self._cfg.embed_dim)
+        self.embed_dim.setValue(min(int(self._cfg.embed_dim), 1024))
+        self.embed_dim.setToolTip(
+            "jina-clip-v2는 64~1024 차원을 지원합니다. 변경 시 전체 재빌드가 필요합니다."
+        )
         emb_form.addRow("백엔드", self.embedder_backend)
         emb_form.addRow("모델 ID", self.embedder_model)
         emb_form.addRow("디바이스", self.embedder_device)
@@ -77,8 +85,10 @@ class SettingsDialog(QDialog):
         self.vlm_backend.addItems(["mock", "vllm"])
         self.vlm_backend.setCurrentText(self._cfg.vlm_backend)
         self.vlm_base_url = QLineEdit(self._cfg.vlm_base_url)
+        self.vlm_base_url.setToolTip("vLLM 등 OpenAI 호환 서버 주소 (예: http://localhost:8000/v1)")
         self.vlm_model = QLineEdit(self._cfg.vlm_model)
         self.vlm_api_key = QLineEdit(self._cfg.vlm_api_key)
+        self.vlm_api_key.setEchoMode(QLineEdit.Password)
         vlm_form.addRow(self.caption_enabled)
         vlm_form.addRow("백엔드", self.vlm_backend)
         vlm_form.addRow("Base URL", self.vlm_base_url)
@@ -95,8 +105,10 @@ class SettingsDialog(QDialog):
         self.chat_backend.addItems(["mock", "vllm"])
         self.chat_backend.setCurrentText(self._cfg.chat_backend)
         self.chat_base_url = QLineEdit(self._cfg.chat_base_url)
+        self.chat_base_url.setToolTip("vLLM 등 OpenAI 호환 서버 주소 (예: http://localhost:8000/v1)")
         self.chat_model = QLineEdit(self._cfg.chat_model)
         self.chat_api_key = QLineEdit(self._cfg.chat_api_key)
+        self.chat_api_key.setEchoMode(QLineEdit.Password)
         chat_form.addRow(self.summarize_enabled)
         chat_form.addRow("백엔드", self.chat_backend)
         chat_form.addRow("Base URL", self.chat_base_url)

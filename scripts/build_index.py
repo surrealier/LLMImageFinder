@@ -69,8 +69,12 @@ def main() -> None:
             state["last"] = p.current
 
     print("indexing…")
-    n = indexer.build(ROOT, progress_cb=progress, log_cb=lambda m: print(" ", m), full_rebuild=True)
-    print(f"DONE: wrote {n} records, collection count = {store.count()}")
+    report = indexer.build(ROOT, progress_cb=progress, log_cb=lambda m: print(" ", m), full_rebuild=True)
+    print(f"DONE: wrote {report.n_written} records, collection count = {store.count()}")
+    if report.skipped:
+        print(f"skipped {len(report.skipped)}:")
+        for path, err in report.skipped[:20]:
+            print("  -", path, "→", err)
 
     # quick validation queries
     svc = SearchService(embedder, store, chat, cfg)

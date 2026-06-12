@@ -13,7 +13,7 @@ from imgsearch.index.indexer import Indexer
 class IndexWorker(QObject):
     progress = Signal(object)  # IndexProgress
     log = Signal(str)
-    finished = Signal(int)  # records written
+    finished = Signal(object)  # BuildReport (build) | int updated (refresh)
     error = Signal(str)
 
     def __init__(

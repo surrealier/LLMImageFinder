@@ -18,7 +18,7 @@ import numpy as np
 
 from imgsearch.backends.base import Captioner, Embedder
 from imgsearch.config import AppConfig
-from imgsearch.core.models import IndexProgress
+from imgsearch.core.models import BuildReport, IndexProgress
 from imgsearch.index import labels, pairing, repr_select, walker
 from imgsearch.store.chroma_store import ChromaStore, folder_id
 
@@ -28,6 +28,9 @@ CancelCb = Callable[[], bool]
 ThumbCb = Callable[[str], None]
 
 _FLUSH_EVERY = 128
+# images accumulated before one embed_image() call — real backends (jina-clip)
+# run this as a single batched GPU forward instead of per-image calls
+_EMBED_BATCH = 32
 
 
 def _noop(*_a, **_k) -> None:
@@ -135,7 +138,7 @@ class Indexer:
         should_cancel: CancelCb = _never,
         thumb_cb: ThumbCb = _noop,
         full_rebuild: bool = False,
-    ) -> int:
+    ) -> BuildReport:
         if not root or not os.path.isdir(root):
             raise FileNotFoundError(f"Dataset root not found: {root!r}")
 
@@ -152,7 +155,7 @@ class Indexer:
                 progress_cb(IndexProgress(len(folders), 0, "scan", dirpath))
             if should_cancel():
                 progress_cb(IndexProgress(0, 0, "cancelled", ""))
-                return 0
+                return BuildReport(cancelled=True)
 
         granularity = self.cfg.index_granularity
         if granularity == "image":
@@ -160,6 +163,7 @@ class Indexer:
         else:
             units = list(folders)
         total = len(units)
+        report = BuildReport(total=total)
         log_cb(f"{len(folders)}개 폴더 / {total}개 {'이미지' if granularity == 'image' else '폴더'} 발견.")
 
         # rebuild if the existing collection used a different embedder/dim/granularity
@@ -177,26 +181,85 @@ class Indexer:
 
         existing = {} if full_rebuild else self.store.existing_mtimes()
 
+        # prune records whose files vanished from disk, so an incremental build
+        # is a true sync (no dead thumbnails / broken '폴더 열기' in results)
+        if existing:
+            if granularity == "image":
+                current_ids = {image_id(img) for _d, img in units}
+            else:
+                current_ids = {folder_id(d) for d, _imgs in units}
+            stale = [rid for rid in existing if rid not in current_ids]
+            if stale:
+                self.store.delete(stale)
+                for rid in stale:
+                    existing.pop(rid, None)
+                report.pruned = len(stale)
+                log_cb(f"디스크에서 사라진 레코드 {len(stale)}개를 정리했습니다.")
+
         ids: list[str] = []
         embs: list = []
         docs: list[str] = []
         metas: list[dict] = []
-        n_written = 0
 
         def flush() -> None:
-            nonlocal ids, embs, docs, metas, n_written
+            nonlocal ids, embs, docs, metas
             if not ids:
                 return
             self.store.upsert(ids, np.vstack(embs), docs, metas)
-            n_written += len(ids)
+            report.n_written += len(ids)
             ids, embs, docs, metas = [], [], [], []
+
+        def skip(path: str, err: str) -> None:
+            report.skipped.append((path, err))
+            log_cb(f"건너뜀 (오류) {os.path.basename(path)}: {err}")
+
+        # image granularity batches embedding calls (one GPU forward per batch);
+        # pending rows hold everything but the vector
+        pending: list[tuple[str, str, str, str, str]] = []  # rid, dir, path, mkey, caption
+
+        def embed_pending() -> None:
+            nonlocal pending
+            if not pending:
+                return
+            paths = [t[2] for t in pending]
+            vecs = None
+            try:
+                got = self.embedder.embed_image(paths)
+                if got is not None and len(got) == len(paths):
+                    vecs = np.asarray(got, dtype=np.float32)
+            except Exception:
+                vecs = None  # fall back to per-image retries below
+            for row, (rid, dirpath, image_path, mkey, caption) in enumerate(pending):
+                vec = None
+                if vecs is not None and np.all(np.isfinite(vecs[row])):
+                    vec = vecs[row]
+                if vec is None:
+                    try:
+                        vec = self._embed_checked(image_path)
+                    except Exception as e:
+                        skip(image_path, f"{type(e).__name__}: {e}")
+                        continue
+                doc = caption or os.path.basename(image_path)
+                meta = self._base_meta(dirpath, image_path, 1, "image", mkey)
+                meta.update(caption=caption, sidecar_text=caption[:400])
+                ids.append(rid)
+                embs.append(vec)
+                docs.append(doc)
+                metas.append(meta)
+                thumb_cb(image_path)
+                if len(ids) >= _FLUSH_EVERY:
+                    flush()
+            pending = []
 
         for i, unit in enumerate(units):
             if should_cancel():
+                # drop the un-embedded pending batch: their mtime keys were never
+                # stamped, so the next incremental build picks them up
                 flush()
+                report.cancelled = True
                 progress_cb(IndexProgress(i, total, "cancelled", ""))
-                log_cb(f"취소됨 — {n_written}개 저장 완료.")
-                return n_written
+                log_cb(f"취소됨 — {report.n_written}개 저장 완료.")
+                return report
 
             if granularity == "image":
                 dirpath, image_path = unit
@@ -211,29 +274,37 @@ class Indexer:
                 progress_cb(IndexProgress(i + 1, total, "index", folder_label))
                 continue
 
-            try:
-                if granularity == "image":
-                    rid, vec, doc, meta = self._image_record(dirpath, image_path, mkey)
-                else:
+            if granularity == "image":
+                try:
+                    caption = self._image_caption(image_path)
+                except Exception as e:
+                    skip(image_path, f"{type(e).__name__}: {e}")
+                    progress_cb(IndexProgress(i + 1, total, "index", folder_label))
+                    continue
+                pending.append((rid, dirpath, image_path, mkey, caption))
+                if len(pending) >= _EMBED_BATCH:
+                    embed_pending()
+            else:
+                try:
                     rid, vec, doc, meta = self._folder_record(dirpath, images, mkey)
-                thumb_cb(meta["representative_image"])
-            except Exception as e:
-                log_cb(f"건너뜀 (오류) {folder_label}: {type(e).__name__}: {e}")
-                progress_cb(IndexProgress(i + 1, total, "index", folder_label))
-                continue
-
-            ids.append(rid)
-            embs.append(vec)
-            docs.append(doc)
-            metas.append(meta)
-            if len(ids) >= _FLUSH_EVERY:
-                flush()
+                    thumb_cb(meta["representative_image"])
+                except Exception as e:
+                    skip(dirpath, f"{type(e).__name__}: {e}")
+                    progress_cb(IndexProgress(i + 1, total, "index", folder_label))
+                    continue
+                ids.append(rid)
+                embs.append(vec)
+                docs.append(doc)
+                metas.append(meta)
+                if len(ids) >= _FLUSH_EVERY:
+                    flush()
             progress_cb(IndexProgress(i + 1, total, "index", folder_label))
 
+        embed_pending()
         flush()
         progress_cb(IndexProgress(total, total, "done", ""))
         log_cb(f"인덱싱 완료 — 총 {self.store.count()}개 레코드가 색인되었습니다.")
-        return n_written
+        return report
 
     # ------------------------------------------------------------------ refresh
     def refresh_captions(
@@ -252,16 +323,17 @@ class Indexer:
             raise ValueError("캡션 새로고침은 이미지 단위(image) 인덱스에서만 지원됩니다")
         if not root or not os.path.isdir(root):
             raise FileNotFoundError(f"Dataset root not found: {root!r}")
-        existing = set(self.store.all_ids())
+        # keep the STORED mtime keys: the embedding reflects the file at BUILD time,
+        # so re-stamping the current mtime here would mask a needed re-embed later.
+        # Its keys are exactly the stored ids — one scan covers both needs.
+        prev_mtimes = self.store.existing_mtimes()
+        existing = set(prev_mtimes)
         if not existing:
             log_cb("인덱스가 비어 있어 갱신할 항목이 없습니다.")
             return 0
         # keep the STORED embedding signature — this run's embedder may be a
         # lightweight mock, and we must not corrupt model_id/embed_dim/granularity
         sig = self.store.stored_signature()
-        # keep the STORED mtime keys: the embedding reflects the file at BUILD time,
-        # so re-stamping the current mtime here would mask a needed re-embed later
-        prev_mtimes = self.store.existing_mtimes()
 
         progress_cb(IndexProgress(0, 0, "scan", root))
         units = [

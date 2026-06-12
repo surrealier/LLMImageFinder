@@ -5,15 +5,29 @@
 > 예) "밤에 오토바이가 주차되어 있는 이미지", "사람이 대로변에 돌아다니는 이미지",
 > "불과 연기가 있는 이미지"
 
-폴더별 **대표 이미지 한 장**을 그리드로 보여주고, 더블클릭하면 확대(확대/이동/←→ 탐색),
-‘폴더 열기’로 탐색기에서 원본 위치를 엽니다.
+폴더별 **대표 이미지 한 장**(또는 이미지별 개별 레코드)을 그리드로 보여주고,
+더블클릭하면 확대(확대/이동/←→ 탐색), ‘폴더 열기’로 탐색기에서 원본 위치를 엽니다.
 
-- **GUI**: PySide6 + qtawesome (다크 테마, 비차단 인덱싱/검색)
-- **벡터 DB**: ChromaDB (`PersistentClient`, cosine) — 리프 폴더당 벡터 1개
-- **임베딩(검색 핵심)**: `jinaai/jina-clip-v2` (다국어 CLIP, 한국어 텍스트→이미지 직접 검색)
+- **GUI**: PySide6 + qtawesome (다크 테마, 비차단 인덱싱/검색, 백그라운드 모델 로딩)
+- **벡터 DB**: ChromaDB (`PersistentClient`, cosine) — 리프 폴더당(또는 이미지당) 벡터 1개
+- **임베딩(검색 핵심)**: `jinaai/jina-clip-v2` (다국어 CLIP, 한국어 텍스트→이미지 직접 검색, 배치 GPU 임베딩)
 - **VLM 캡션**: Qwen2.5-VL (vLLM, OpenAI 호환 API) — 대표 이미지의 한국어 설명 자동 추출
 - **sLLM 채팅**: Qwen (vLLM) — 질의 정제 + 결과 RAG 요약
 - **MOCK 모드**: ML 의존성 0으로도 **전체 기능이 즉시 동작** (결정적 임베딩 + 규칙 기반 한국어 처리)
+
+### 주요 기능 (v0.2.0)
+
+| 기능 | 사용법 |
+|---|---|
+| 검색어 히스토리 | 입력창에서 **↑/↓** |
+| 비슷한 이미지 검색 | 타일 **우클릭 → 비슷한 이미지 검색** (저장 임베딩 재사용, 즉시) |
+| YOLO 박스 오버레이 | 뷰어에서 **B** 또는 '라벨' 버튼 (클래스명·색상 표시) |
+| 결과 순서 탐색 | 뷰어 ←/→가 검색 랭킹 순으로 이동, 점수·캡션 표시 |
+| 결과 수 k / 점수 필터 | 갤러리 헤더의 **결과 수** · **점수 ≥** 컨트롤 |
+| 결과 내보내기 | 헤더 **내보내기** → CSV 저장 / 경로 목록 복사 |
+| 삭제 파일 정리 | 인덱스 업데이트 시 디스크에서 사라진 레코드 자동 삭제 |
+| 인덱스 정보 | 툴바 **인덱스 정보** — 모델/단위/빌드 시각/경로 불일치 경고 |
+| 단축키 | **F5** 인덱스 업데이트 · **Ctrl+L** 검색창 · **Enter** 뷰어 · **Ctrl+C** 경로 복사 · **Ctrl+E** 탐색기 |
 
 ---
 
@@ -168,10 +182,12 @@ imgsearch/
   index/     walker · pairing · repr_select · indexer
   store/     chroma_store
   ui/        main_window · chat_widget · results_gallery · gallery_delegate
-             image_viewer · settings_dialog · mock_banner · icons · osutil
-  workers/   qworker · index_worker · query_worker · thumb_worker
+             image_viewer · settings_dialog · class_names_dialog
+             index_info_dialog · mock_banner · icons · osutil
+  workers/   qworker · index_worker · query_worker · thumb_worker · preload_worker
 tests/       walker · pairing · repr_select · mock_embedder · chroma_store
-             query_refine · indexer_query (통합)
+             query_refine · indexer_query · class_names · config · services
+             build_pipeline (배치/정리/리포트) · labels
 ```
 
 ## 6. 문제 해결

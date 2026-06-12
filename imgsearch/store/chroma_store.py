@@ -94,6 +94,12 @@ class ChromaStore:
                 metadatas=[metadatas[i + k] for k in keep],
             )
 
+    def delete(self, ids: Sequence[str]) -> None:
+        """Remove records by id (e.g. files that vanished from disk)."""
+        ids = list(ids)
+        for i in range(0, len(ids), _UPSERT_BATCH):
+            self._col.delete(ids=ids[i : i + _UPSERT_BATCH])
+
     def clear(self) -> None:
         """Drop and recreate the collection (full rebuild)."""
         try:
@@ -117,21 +123,43 @@ class ChromaStore:
         except Exception:
             return []
 
+    def get_embedding(self, record_id: str) -> Optional[np.ndarray]:
+        """The stored embedding for one record, or None if absent (used by
+        query-by-example so no model call is needed)."""
+        try:
+            got = self._col.get(ids=[record_id], include=["embeddings"])
+        except Exception:
+            return None
+        embs = got.get("embeddings")
+        if embs is None or len(embs) == 0:
+            return None
+        return np.asarray(embs[0], dtype=np.float32)
+
+    _SCAN_PAGE = 5000
+
     def existing_mtimes(self) -> dict[str, str]:
         """Map id -> stored folder mtime key (string), for incremental skipping.
 
         Stored as a fixed-precision string so equality is exact across the
         Chroma round-trip (float mtimes sit at float64's precision edge).
+        Paged so memory stays bounded on large per-image indexes.
         """
-        try:
-            got = self._col.get(include=["metadatas"])
-        except Exception:
-            return {}
         out: dict[str, str] = {}
-        for _id, md in zip(got.get("ids", []), got.get("metadatas", []) or []):
-            if md and md.get("mtime") is not None:
-                out[_id] = str(md["mtime"])
-        return out
+        offset = 0
+        while True:
+            try:
+                got = self._col.get(
+                    include=["metadatas"], limit=self._SCAN_PAGE, offset=offset
+                )
+            except Exception:
+                return out
+            ids = got.get("ids", [])
+            for _id, md in zip(ids, got.get("metadatas", []) or []):
+                if md and md.get("mtime") is not None:
+                    out[_id] = str(md["mtime"])
+            if len(ids) < self._SCAN_PAGE:
+                return out
+            offset += len(ids)
 
     def stored_signature(self) -> Optional[tuple[str, int, Optional[str]]]:
         """(model_id, embed_dim, granularity) of an existing record, for mismatch

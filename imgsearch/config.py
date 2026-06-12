@@ -48,6 +48,7 @@ class AppConfig:
 
     # --- retrieval / ui knobs ---
     top_k: int = 24
+    score_threshold: float = 0.0  # hide hits below this similarity (display-side filter)
     thumb_size: int = 256
     max_members_for_repr: int = 64
     image_exts: list[str] = field(default_factory=lambda: list(DEFAULT_IMAGE_EXTS))

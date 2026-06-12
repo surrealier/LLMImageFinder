@@ -1,7 +1,10 @@
 """Headless end-to-end smoke test of the mock pipeline (no GUI, no ML)."""
 
+import sys
 import tempfile
 from pathlib import Path
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # Korean output on cp949 consoles
 
 from imgsearch.config import AppConfig
 from imgsearch.core.registry import build_backends
@@ -21,8 +24,8 @@ def main() -> None:
     store = ChromaStore(tmp / "chroma")
 
     idx = Indexer(embedder, captioner, store, cfg)
-    n = idx.build(str(ds), log_cb=lambda m: print("  log:", m), full_rebuild=True)
-    print(f"indexed records written={n} collection_count={store.count()}")
+    report = idx.build(str(ds), log_cb=lambda m: print("  log:", m), full_rebuild=True)
+    print(f"indexed records written={report.n_written} collection_count={store.count()}")
 
     svc = SearchService(embedder, store, chat, cfg)
     for q in [

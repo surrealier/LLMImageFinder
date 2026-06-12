@@ -1,6 +1,6 @@
 [project]
 name = "imgsearch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Search an image dataset by natural-language (Korean) using VLM captions, multilingual CLIP embeddings, ChromaDB RAG, and a PySide6 GUI."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

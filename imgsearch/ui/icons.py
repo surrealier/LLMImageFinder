@@ -28,7 +28,8 @@ def index() -> QIcon:
 
 
 def rebuild() -> QIcon:
-    return _i("fa5s.redo", "#22c55e")
+    # warning color: this action wipes the existing index
+    return _i("fa5s.redo", "#f59e0b")
 
 
 def search() -> QIcon:
@@ -73,3 +74,23 @@ def warn() -> QIcon:
 
 def cancel() -> QIcon:
     return _i("fa5s.times", "#ef4444")
+
+
+def copy() -> QIcon:
+    return _i("fa5s.copy")
+
+
+def export() -> QIcon:
+    return _i("fa5s.file-export", "#34d399")
+
+
+def info() -> QIcon:
+    return _i("fa5s.info-circle", "#60a5fa")
+
+
+def similar() -> QIcon:
+    return _i("fa5s.clone", "#7dd3fc")
+
+
+def eye() -> QIcon:
+    return _i("fa5s.eye")

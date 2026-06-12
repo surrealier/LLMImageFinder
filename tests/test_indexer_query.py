@@ -13,8 +13,9 @@ def test_end_to_end_retrieval(sample_ds, tmp_path, n_scenes):
     cfg = AppConfig(dataset_root=str(sample_ds))
     emb, cap, chat = build_backends(cfg)
     store = ChromaStore(tmp_path / "chroma")
-    n = Indexer(emb, cap, store, cfg).build(str(sample_ds), full_rebuild=True)
-    assert n == n_scenes
+    report = Indexer(emb, cap, store, cfg).build(str(sample_ds), full_rebuild=True)
+    assert report.n_written == n_scenes
+    assert not report.skipped and not report.cancelled
     assert store.count() == n_scenes
 
     svc = SearchService(emb, store, chat, cfg)
@@ -38,8 +39,9 @@ def test_incremental_skip(sample_ds, tmp_path, n_scenes):
     idx = Indexer(emb, cap, store, cfg)
     idx.build(str(sample_ds), full_rebuild=True)
     # second pass: nothing changed -> no new writes, count stable
-    written = idx.build(str(sample_ds), full_rebuild=False)
-    assert written == 0
+    report = idx.build(str(sample_ds), full_rebuild=False)
+    assert report.n_written == 0
+    assert report.pruned == 0
     assert store.count() == n_scenes
 
 
@@ -54,8 +56,8 @@ def test_dim_change_triggers_rebuild(sample_ds, tmp_path, n_scenes):
     # switch embed_dim -> an *incremental* build must auto full-rebuild, not crash
     cfg2 = AppConfig(dataset_root=str(sample_ds), embed_dim=256)
     emb2, cap2, chat2 = build_backends(cfg2)
-    written = Indexer(emb2, cap2, store, cfg2).build(str(sample_ds), full_rebuild=False)
-    assert written == n_scenes
+    report = Indexer(emb2, cap2, store, cfg2).build(str(sample_ds), full_rebuild=False)
+    assert report.n_written == n_scenes
     assert store.stored_signature() == ("mock", 256, "folder")
     assert store.count() == n_scenes
 
@@ -76,9 +78,9 @@ def test_image_granularity_with_yolo_labels(tmp_path):
     )
     emb, cap, chat = build_backends(cfg)
     store = ChromaStore(tmp_path / "chroma")
-    n = Indexer(emb, cap, store, cfg).build(str(tmp_path / "ds"), full_rebuild=True)
+    report = Indexer(emb, cap, store, cfg).build(str(tmp_path / "ds"), full_rebuild=True)
 
-    assert n == 4  # one record PER IMAGE, not per folder
+    assert report.n_written == 4  # one record PER IMAGE, not per folder
     assert store.count() == 4
 
     svc = SearchService(emb, store, chat, cfg)
