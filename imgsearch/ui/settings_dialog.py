@@ -130,6 +130,19 @@ class SettingsDialog(QDialog):
         ret_form.addRow("썸네일 크기(px)", self.thumb_size)
         root.addWidget(ret_box)
 
+        # --- object graph ---
+        graph_box = QGroupBox("객체 그래프 (GraphDB)")
+        graph_form = QFormLayout(graph_box)
+        self.graph_backend = QComboBox()
+        self.graph_backend.addItem("메모리 (내장, 의존성 없음)", "memory")
+        self.graph_backend.addItem("kuzu (임베디드 GraphDB, [graph] 설치 필요)", "kuzu")
+        self.graph_backend.setCurrentIndex(1 if self._cfg.graph_backend == "kuzu" else 0)
+        self.graph_backend.setToolTip(
+            "kuzu는 'uv sync --extra graph' 설치가 필요하며, 없으면 메모리 그래프로 자동 대체됩니다."
+        )
+        graph_form.addRow("그래프 백엔드", self.graph_backend)
+        root.addWidget(graph_box)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -161,4 +174,5 @@ class SettingsDialog(QDialog):
         c.chat_api_key = self.chat_api_key.text().strip() or "EMPTY"
         c.top_k = int(self.top_k.value())
         c.thumb_size = int(self.thumb_size.value())
+        c.graph_backend = self.graph_backend.currentData()
         return c

@@ -15,6 +15,8 @@ from datetime import datetime
 from PySide6.QtCore import QRunnable, Qt, QThreadPool
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
@@ -33,26 +35,32 @@ from PySide6.QtWidgets import (
 
 from imgsearch.backends.mock import MockChatLLM, MockEmbedder
 from imgsearch.config import AppConfig, save_class_names_yaml
+from imgsearch.core.agentic import AgenticSearch
 from imgsearch.core.registry import build_backends
 from imgsearch.core.services import SearchService
+from imgsearch.graph.registry import build_graph_store
 from imgsearch.index import labels
-from imgsearch.index.indexer import Indexer
+from imgsearch.index.indexer import Indexer, image_id
 from imgsearch.paths import AppPaths
 from imgsearch.store.chroma_store import ChromaStore
 from imgsearch.thumbs import ensure_thumb
 from imgsearch.ui import icons
 from imgsearch.ui.chat_widget import ChatWidget
 from imgsearch.ui.class_names_dialog import ClassNamesDialog
+from imgsearch.ui.graph_dialog import GraphDialog
 from imgsearch.ui.image_viewer import ImageViewer
 from imgsearch.ui.index_info_dialog import IndexInfoDialog, load_index_meta, save_index_meta
 from imgsearch.ui.mock_banner import MockBanner
 from imgsearch.ui.osutil import reveal_in_explorer
 from imgsearch.ui.results_gallery import ResultsGallery
 from imgsearch.ui.settings_dialog import SettingsDialog
+from imgsearch.workers.graph_worker import GraphBuildWorker
 from imgsearch.workers.index_worker import IndexWorker
 from imgsearch.workers.preload_worker import PreloadWorker
 from imgsearch.workers.qworker import ThreadRunner
 from imgsearch.workers.query_worker import QueryWorker
+
+_MODE_LABELS = [("하이브리드", "hybrid"), ("벡터", "vector"), ("키워드", "keyword")]
 
 
 def _index_signature(cfg: AppConfig) -> tuple:
@@ -96,12 +104,15 @@ class MainWindow(QMainWindow):
         self._build_t0 = 0.0
         self._last_hits: list = []  # raw hits of the last query
         self._display_hits: list = []  # after score-threshold filter
+        self._graph_runner: ThreadRunner | None = None
 
         self.setWindowTitle("데이터셋 검색 — sLLM 이미지 탐색")
         self.resize(1240, 820)
 
         # the store never depends on backend choice — create it once
         self.store = ChromaStore(self.paths.chroma_dir)
+        # object graph (memory or kuzu); built lazily off-thread from dataset labels
+        self.graph = build_graph_store(self.cfg, self.paths.graph_dir)
         # index-time thumbnail pre-warm runs here instead of on the index thread
         self._prewarm_pool = QThreadPool(self)
         self._prewarm_pool.setMaxThreadCount(2)
@@ -114,6 +125,7 @@ class MainWindow(QMainWindow):
     def _wire_services(self) -> None:
         self.service = SearchService(self.embedder, self.store, self.chat, self.cfg)
         self.indexer = Indexer(self.embedder, self.captioner, self.store, self.cfg)
+        self.agent = AgenticSearch(self.service, self.graph, self.chat, self.cfg)
 
     def _setup_backends(self) -> None:
         """Mock backends build instantly in-place; real ones load off-thread so
@@ -198,6 +210,7 @@ class MainWindow(QMainWindow):
         self.act_rebuild.setToolTip("기존 인덱스를 모두 지우고 처음부터 다시 색인합니다")
         tb.addSeparator()
         tb.addAction(icons.tags(), "클래스 이름", self.edit_class_names)
+        tb.addAction(icons.graph(), "객체 그래프", self.show_object_graph)
         tb.addAction(icons.info(), "인덱스 정보", self.show_index_info)
         tb.addSeparator()
         tb.addAction(icons.images(), "샘플 데이터셋 생성", self.make_sample)
@@ -228,6 +241,23 @@ class MainWindow(QMainWindow):
         title.setStyleSheet("font-weight:600; color:#cbd5e1;")
         header.addWidget(title)
         header.addStretch(1)
+
+        self.mode_combo = QComboBox()
+        for label, data in _MODE_LABELS:
+            self.mode_combo.addItem(label, data)
+        cur = next((i for i, (_, d) in enumerate(_MODE_LABELS) if d == self.cfg.search_mode), 0)
+        self.mode_combo.setCurrentIndex(cur)
+        self.mode_combo.setToolTip("검색 방식 — 하이브리드(벡터+키워드), 벡터(의미), 키워드(BM25)")
+        self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
+        header.addWidget(self.mode_combo)
+
+        self.agent_check = QCheckBox("에이전트")
+        self.agent_check.setChecked(bool(self.cfg.agentic_enabled))
+        self.agent_check.setToolTip(
+            "에이전트 검색 — 계획→하이브리드 검색→객체 그래프 필터→요약 단계를 거칩니다"
+        )
+        self.agent_check.toggled.connect(self._on_agentic_toggled)
+        header.addWidget(self.agent_check)
 
         header.addWidget(QLabel("결과 수"))
         self.k_spin = QSpinBox()
@@ -319,6 +349,9 @@ class MainWindow(QMainWindow):
                 "주의: 현재 인덱스는 다른 데이터셋 경로에서 생성되었습니다. "
                 "툴바의 ‘인덱스 정보’를 확인하고 필요하면 전체 재빌드를 실행하세요."
             )
+        # if agentic mode is already on, pre-build the object graph it relies on
+        if self.cfg.agentic_enabled and self.store.count() > 0:
+            self._ensure_graph_async()
 
     def _unit_label(self) -> str:
         return "이미지" if self.cfg.index_granularity == "image" else "폴더"
@@ -344,18 +377,27 @@ class MainWindow(QMainWindow):
 
     def run_query(self, text: str) -> None:
         if self._query_runner is not None:
+            self.chat_widget.add_system("이전 검색이 진행 중입니다 — 완료 후 다시 시도해 주세요.")
             return
         self.chat_widget.add_user(text)
         if not self._ready_for_query():
             return
         self.chat_widget.set_busy(True)
-        self.status_msg.setText("검색 중…")
+        agentic = bool(self.cfg.agentic_enabled)
+        self.status_msg.setText("에이전트 검색 중…" if agentic else "검색 중…")
 
-        worker = QueryWorker(self.service, text, self.cfg.top_k)
+        agent = self.agent if agentic else None
+        worker = QueryWorker(self.service, text, self.cfg.top_k, agent=agent)
         worker.finished.connect(self._on_query_done)
         worker.error.connect(self._on_query_error)
+        # queued (NOT DirectConnection): the worker thread is busy producing steps
+        # and this slot touches the chat widget, so it must run on the GUI thread
+        worker.trace.connect(self._on_agent_step)
         self._query_runner = ThreadRunner(worker, self)
         self._query_runner.start()
+
+    def _on_agent_step(self, line: str) -> None:
+        self.chat_widget.add_system(line)
 
     def run_similar(self, hit) -> None:
         """Query-by-example: reuses the stored embedding, so it's fast enough
@@ -382,7 +424,9 @@ class MainWindow(QMainWindow):
 
     def _apply_display_filter(self) -> None:
         thr = float(self.cfg.score_threshold)
-        hits = [h for h in self._last_hits if h.score >= thr]
+        # graph-membership hits (object-graph AND filter) aren't ranked by cosine,
+        # so the score-threshold must not hide them — keep them regardless
+        hits = [h for h in self._last_hits if h.score >= thr or h.match == "graph"]
         self._display_hits = hits
         self.gallery.set_results(hits)
         self.export_btn.setEnabled(bool(hits))
@@ -419,6 +463,92 @@ class MainWindow(QMainWindow):
         self.cfg.save(self.paths.config_file)
         if self._last_hits:
             self._apply_display_filter()
+
+    def _on_mode_changed(self, _index: int) -> None:
+        self.cfg.search_mode = self.mode_combo.currentData() or "hybrid"
+        self.cfg.save(self.paths.config_file)
+        self.service.invalidate_lexical()
+
+    def _on_agentic_toggled(self, on: bool) -> None:
+        self.cfg.agentic_enabled = bool(on)
+        self.cfg.save(self.paths.config_file)
+        if on and self.store.count() > 0:
+            self._ensure_graph_async()  # agentic graph-filter needs the object graph
+
+    # ---------------------------------------------------------------- object graph
+    def _ensure_graph_async(self, force: bool = False) -> None:
+        """Build the object graph off-thread. With force=False only builds when the
+        graph is empty (lazy); force=True rebuilds after an index/caption change."""
+        if self._graph_runner is not None and self._graph_runner.is_running():
+            return
+        root = self.cfg.dataset_root
+        if not root or not os.path.isdir(root):
+            return
+        if not force:
+            try:
+                if self.graph.count() > 0:
+                    return
+            except Exception:
+                pass
+        worker = GraphBuildWorker(self.graph, root, self.cfg)
+        worker.finished.connect(self._on_graph_built)
+        worker.error.connect(lambda m: self.chat_widget.add_system(f"객체 그래프 빌드 오류: {m}"))
+        self._graph_runner = ThreadRunner(worker, self)
+        self._graph_runner.start()
+
+    def _on_graph_built(self, n: int) -> None:
+        self._graph_runner = None
+        if n > 0:
+            self.status_msg.setText(f"객체 그래프 준비됨 — 라벨 이미지 {n}개")
+
+    def show_object_graph(self) -> None:
+        if self._graph_runner is not None and self._graph_runner.is_running():
+            QMessageBox.information(self, "그래프 빌드 중", "객체 그래프를 만드는 중입니다. 잠시 후 다시 열어주세요.")
+            return
+        try:
+            empty = self.graph.count() == 0
+        except Exception:
+            empty = True
+        if empty:
+            if not self.cfg.dataset_root or not os.path.isdir(self.cfg.dataset_root):
+                QMessageBox.information(
+                    self, "그래프 없음",
+                    "YOLO 라벨이 있는 데이터셋을 색인한 뒤 사용할 수 있습니다.",
+                )
+                return
+            # build synchronously here (user explicitly asked to see the graph)
+            QGuiApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                from imgsearch.graph.builder import build_records
+
+                self.graph.build(build_records(self.cfg.dataset_root, self.cfg))
+            finally:
+                QGuiApplication.restoreOverrideCursor()
+        dlg = GraphDialog(self.graph, self)
+        dlg.show_images.connect(self._show_graph_images)
+        dlg.exec()
+
+    def _show_graph_images(self, paths: list) -> None:
+        if not paths:
+            self.chat_widget.add_system("선택한 객체 조합을 모두 포함한 이미지가 없습니다.")
+            return
+        # join by image_id (graph keeps raw paths; the index is keyed by image_id)
+        hit_map = self.store.fetch([image_id(p) for p in paths])
+        hits = list(hit_map.values())
+        if not hits:
+            self.chat_widget.add_system(
+                "그래프가 현재 인덱스와 일치하지 않습니다 — 전체 재빌드를 권장합니다."
+            )
+            return
+        for h in hits:
+            h.match = "graph"
+        self._last_hits = hits
+        self._apply_display_filter()
+        if len(hits) < len(paths):
+            self.chat_widget.add_system(
+                f"그래프 {len(paths)}건 중 {len(hits)}건만 현재 인덱스에 있습니다 — 전체 재빌드를 권장합니다."
+            )
+        self.chat_widget.add_assistant(f"객체 그래프 필터 결과 {len(hits)}개를 표시합니다.")
 
     # ---------------------------------------------------------------- export
     def export_csv(self) -> None:
@@ -627,6 +757,8 @@ class MainWindow(QMainWindow):
         was_refresh = self._index_mode == "refresh"
         self._finish_index_ui()
         self._refresh_status()
+        # documents/labels changed -> BM25 index and object graph are now stale
+        self.service.invalidate_lexical()
         if was_refresh:
             n = int(result)
             if n > 0:
@@ -635,6 +767,7 @@ class MainWindow(QMainWindow):
                 self.chat_widget.add_system(
                     "갱신된 레코드가 없습니다 — 인덱스와 색인 단위가 일치하는지 확인하거나 전체 재빌드를 실행하세요."
                 )
+            self._ensure_graph_async(force=True)  # names changed -> rebuild graph
             return
 
         report = result  # BuildReport
@@ -647,6 +780,7 @@ class MainWindow(QMainWindow):
         self.chat_widget.add_system(msg)
         if not report.cancelled:
             self._write_index_meta(report)
+            self._ensure_graph_async(force=True)
         if report.skipped:
             self.chat_widget.add_system(f"{len(report.skipped)}개 항목은 오류로 건너뛰었습니다 (자세한 내용 표시됨).")
             box = QMessageBox(
@@ -724,8 +858,12 @@ class MainWindow(QMainWindow):
         if self._query_runner is not None and self._query_runner.is_running():
             QMessageBox.information(self, "검색 진행 중", "검색이 끝난 뒤 설정을 변경하세요.")
             return
+        if self._graph_runner is not None and self._graph_runner.is_running():
+            QMessageBox.information(self, "그래프 빌드 중", "객체 그래프 빌드가 끝난 뒤 설정을 변경하세요.")
+            return
         before_index = _index_signature(self.cfg)
         before_backend = _backend_signature(self.cfg)
+        before_graph = self.cfg.graph_backend
         dlg = SettingsDialog(self.cfg, self)
         if dlg.exec() != SettingsDialog.Accepted:
             return
@@ -737,8 +875,18 @@ class MainWindow(QMainWindow):
             # cheap settings only: re-point the live objects at the new config
             self.service.cfg = self.cfg
             self.indexer.cfg = self.cfg
+            self.agent.cfg = self.cfg
             self._update_model_chip()
             self._apply_banner()
+        if self.cfg.graph_backend != before_graph:
+            try:
+                self.graph.close()
+            except Exception:
+                pass
+            self.graph = build_graph_store(self.cfg, self.paths.graph_dir)
+            self.agent.graph = self.graph
+            if self.store.count() > 0:
+                self._ensure_graph_async(force=True)
         self.gallery.set_thumb_size(self.cfg.thumb_size)
         self.k_spin.setValue(int(self.cfg.top_k))
         self._refresh_status()
@@ -779,6 +927,8 @@ class MainWindow(QMainWindow):
             self._index_runner.wait(8000)
         if self._query_runner is not None and self._query_runner.is_running():
             self._query_runner.wait(8000)
+        if self._graph_runner is not None and self._graph_runner.is_running():
+            self._graph_runner.wait(8000)
         if self._preload_runner is not None and self._preload_runner.is_running():
             # a torch weight load can't be aborted — wait it out (rarely hit)
             QGuiApplication.setOverrideCursor(Qt.WaitCursor)
@@ -790,4 +940,8 @@ class MainWindow(QMainWindow):
         if not self._prewarm_pool.waitForDone(2000):
             self._prewarm_pool.setParent(None)  # don't let a wedged decode block exit
         self.gallery.shutdown()  # drain thumbnail tasks before teardown
+        try:
+            self.graph.close()  # release the kuzu directory lock for the next session
+        except Exception:
+            pass
         super().closeEvent(event)

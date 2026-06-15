@@ -17,6 +17,7 @@ from imgsearch.ui.gallery_delegate import (
     FOLDER_ROLE,
     GalleryDelegate,
     HIT_ROLE,
+    MATCH_ROLE,
     MEMBERS_ROLE,
     PATH_ROLE,
     PIXMAP_ROLE,
@@ -79,6 +80,7 @@ class ResultsGallery(QListView):
             item.setData(hit.image_path, PATH_ROLE)
             item.setData(float(hit.score), SCORE_ROLE)
             item.setData(int(hit.member_count), MEMBERS_ROLE)
+            item.setData(str(getattr(hit, "match", "") or ""), MATCH_ROLE)
             item.setData(hit, HIT_ROLE)
             item.setToolTip(
                 f"{hit.caption}\n{hit.image_path}\n점수: {hit.score:.3f}"

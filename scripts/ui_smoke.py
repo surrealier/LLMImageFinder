@@ -124,6 +124,44 @@ def main() -> None:
     idlg.close()
     print("index info dialog constructed")
 
+    # v0.3.0: search-mode switch (vector/hybrid/keyword) via the header combo
+    win.mode_combo.setCurrentIndex(2)  # keyword
+    assert win.cfg.search_mode == "keyword", win.cfg.search_mode
+    win.mode_combo.setCurrentIndex(0)  # hybrid
+    assert win.cfg.search_mode == "hybrid"
+    win.chat_widget.input.setText("불과 연기")
+    win.chat_widget._on_send()
+    timer = QElapsedTimer(); timer.start()
+    while win._query_runner is not None and timer.elapsed() < 8000:
+        app.processEvents(QEventLoop.AllEvents, 50)
+    print("hybrid query rows:", win.gallery._model.rowCount())
+    assert win.gallery._model.rowCount() > 0
+
+    # v0.3.0: agentic search path (mock planner + memory graph + hybrid)
+    win.agent_check.setChecked(True)
+    assert win.cfg.agentic_enabled
+    # let the graph build worker finish
+    t3 = QElapsedTimer(); t3.start()
+    while win._graph_runner is not None and t3.elapsed() < 8000:
+        app.processEvents(QEventLoop.AllEvents, 50)
+    win.chat_widget.input.setText("불과 연기")
+    win.chat_widget._on_send()
+    timer = QElapsedTimer(); timer.start()
+    while win._query_runner is not None and timer.elapsed() < 8000:
+        app.processEvents(QEventLoop.AllEvents, 50)
+    print("agentic query rows:", win.gallery._model.rowCount())
+    win.agent_check.setChecked(False)
+
+    # v0.3.0: object graph dialog
+    from imgsearch.ui.graph_dialog import GraphDialog
+
+    if win.graph.count() == 0:
+        from imgsearch.graph.builder import build_records
+        win.graph.build(build_records(str(ds), cfg))
+    gdlg = GraphDialog(win.graph, win)
+    print("graph dialog classes:", gdlg.class_list.count())
+    gdlg.close()
+
     win.close()
     print("\nUI SMOKE OK")
 

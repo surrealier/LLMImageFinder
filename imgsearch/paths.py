@@ -23,6 +23,7 @@ class AppPaths:
     history_file: Path  # recent search queries (JSON list)
     index_meta_file: Path  # last build info (when/what/how long), next to chroma
     chroma_dir: Path
+    graph_dir: Path  # embedded GraphDB (kuzu) persistence, next to chroma
     thumbs_dir: Path
     logs_dir: Path
 
@@ -38,6 +39,7 @@ def app_paths() -> AppPaths:
             history_file=root / "history.json",
             index_meta_file=root / "index_meta.json",
             chroma_dir=root / "chroma",
+            graph_dir=root / "graph",
             thumbs_dir=root / "thumbs",
             logs_dir=root / "logs",
         )
@@ -49,6 +51,7 @@ def app_paths() -> AppPaths:
         history_file=cfg_dir / "history.json",
         index_meta_file=data_dir / "index_meta.json",
         chroma_dir=data_dir / "chroma",
+        graph_dir=data_dir / "graph",
         thumbs_dir=Path(_DIRS.user_cache_dir) / "thumbs",
         logs_dir=Path(_DIRS.user_log_dir),
     )

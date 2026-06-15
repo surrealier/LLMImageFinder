@@ -99,6 +99,35 @@ class OpenAICompatChatLLM(_OpenAICompatBase):
             log.warning("refine_query failed, using raw query: %s", e)
             return ko_text
 
+    def plan(self, query: str, class_names=None) -> dict:
+        """Decompose a query into {semantic, required_objects, excluded_objects} JSON.
+        Untrusted output: strip fences, json.loads in try/except — the caller treats a
+        None/invalid return as 'fall back to the rule-based plan', so never crashes."""
+        import json
+
+        names = (
+            list(class_names.values()) if isinstance(class_names, dict) else list(class_names or [])
+        )
+        messages = [
+            {"role": "system", "content": prompts.PLAN_SYSTEM},
+            {"role": "user", "content": prompts.PLAN_USER.format(
+                classes=", ".join(str(n) for n in names) or "(없음)", query=query)},
+        ]
+        try:
+            out = self._chat(messages, max_tokens=200, temperature=0.0)
+        except Exception as e:
+            log.warning("plan failed: %s", e)
+            return {}
+        text = out.strip()
+        if text.startswith("```"):  # strip a ```json … ``` fence if present
+            text = text.strip("`")
+            text = text[text.find("{"): text.rfind("}") + 1]
+        try:
+            data = json.loads(text)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
     def summarize(self, query: str, hits: list[FolderHit]) -> str:
         if not hits:
             return f"'{query}'에 해당하는 이미지를 찾지 못했습니다."

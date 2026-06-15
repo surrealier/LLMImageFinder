@@ -39,6 +39,13 @@ class ChromaStore:
         self._col = self._client.get_or_create_collection(
             name=collection, metadata={"hnsw:space": "cosine"}
         )
+        # bumped on every write so a cached lexical index can detect staleness even
+        # when the id COUNT is unchanged (e.g. refresh_captions rewrites documents)
+        self._rev = 0
+
+    def revision(self) -> tuple[int, int]:
+        """(record_count, write_revision) — a cheap staleness key for caches."""
+        return (self.count(), self._rev)
 
     # --- writes ---
     def upsert(
@@ -62,6 +69,7 @@ class ChromaStore:
                 documents=list(documents[i:j]),
                 metadatas=list(metadatas[i:j]),
             )
+        self._rev += 1
 
     def update_meta(
         self,
@@ -93,12 +101,16 @@ class ChromaStore:
                 documents=[documents[i + k] for k in keep],
                 metadatas=[metadatas[i + k] for k in keep],
             )
+        self._rev += 1
 
     def delete(self, ids: Sequence[str]) -> None:
         """Remove records by id (e.g. files that vanished from disk)."""
         ids = list(ids)
+        if not ids:
+            return
         for i in range(0, len(ids), _UPSERT_BATCH):
             self._col.delete(ids=ids[i : i + _UPSERT_BATCH])
+        self._rev += 1
 
     def clear(self) -> None:
         """Drop and recreate the collection (full rebuild)."""
@@ -109,6 +121,7 @@ class ChromaStore:
         self._col = self._client.get_or_create_collection(
             name=self._name, metadata={"hnsw:space": "cosine"}
         )
+        self._rev += 1
 
     # --- reads ---
     def count(self) -> int:
@@ -134,6 +147,24 @@ class ChromaStore:
         if embs is None or len(embs) == 0:
             return None
         return np.asarray(embs[0], dtype=np.float32)
+
+    def get_embeddings(self, ids: Sequence[str]) -> dict[str, np.ndarray]:
+        """Stored embeddings for many ids in one batched round-trip (id -> vector).
+        Avoids the N+1 get() pattern when scoring keyword/graph hits."""
+        ids = list(ids)
+        out: dict[str, np.ndarray] = {}
+        for i in range(0, len(ids), _UPSERT_BATCH):
+            batch = ids[i : i + _UPSERT_BATCH]
+            try:
+                got = self._col.get(ids=batch, include=["embeddings"])
+            except Exception:
+                continue
+            embs = got.get("embeddings")
+            if embs is None:  # ndarray — avoid `or []` (ambiguous truth value)
+                continue
+            for gid, emb in zip(got.get("ids", []), embs):
+                out[str(gid)] = np.asarray(emb, dtype=np.float32)
+        return out
 
     _SCAN_PAGE = 5000
 
@@ -181,6 +212,18 @@ class ChromaStore:
                 return None
         return None
 
+    @staticmethod
+    def _hit_from_meta(md: dict, doc: str, score: float) -> FolderHit:
+        md = md or {}
+        return FolderHit(
+            folder=str(md.get("leaf_folder", "")),
+            image_path=str(md.get("representative_image", "")),
+            caption=str(md.get("caption", "") or doc or ""),
+            score=score,
+            member_count=int(md.get("member_count", 0) or 0),
+            sidecar_text=str(md.get("sidecar_text", "")),
+        )
+
     def query(self, embedding: np.ndarray, k: int) -> list[FolderHit]:
         if self.count() == 0:
             return []
@@ -195,17 +238,62 @@ class ChromaStore:
         dists = (res.get("distances") or [[]])[0]
         hits: list[FolderHit] = []
         for md, doc, dist in zip(metas, docs, dists):
-            md = md or {}
             sim = 1.0 - float(dist)  # cosine distance -> similarity
             score = max(0.0, sim) if math.isfinite(sim) else 0.0
-            hits.append(
-                FolderHit(
-                    folder=str(md.get("leaf_folder", "")),
-                    image_path=str(md.get("representative_image", "")),
-                    caption=str(md.get("caption", "") or doc or ""),
-                    score=score,
-                    member_count=int(md.get("member_count", 0) or 0),
-                    sidecar_text=str(md.get("sidecar_text", "")),
-                )
-            )
+            hits.append(self._hit_from_meta(md, doc, score))
         return hits
+
+    def search_vector(self, embedding: np.ndarray, k: int) -> list[tuple[str, float]]:
+        """(chroma_id, cosine_similarity) — the vector arm of hybrid search.
+        Returns the SAME ids the records were upserted under, so the keyword arm
+        (keyed by the same ids) can be fused by id."""
+        if self.count() == 0:
+            return []
+        vec = np.asarray(embedding, dtype=np.float32).reshape(-1).tolist()
+        res = self._col.query(
+            query_embeddings=[vec], n_results=max(1, int(k)), include=["distances"]
+        )
+        ids = (res.get("ids") or [[]])[0]
+        dists = (res.get("distances") or [[]])[0]
+        out: list[tuple[str, float]] = []
+        for rid, dist in zip(ids, dists):
+            sim = 1.0 - float(dist)
+            out.append((str(rid), max(0.0, sim) if math.isfinite(sim) else 0.0))
+        return out
+
+    def all_documents(self) -> list[tuple[str, str]]:
+        """(chroma_id, document) for every record, paged — feeds the BM25 index."""
+        out: list[tuple[str, str]] = []
+        offset = 0
+        while True:
+            try:
+                got = self._col.get(
+                    include=["documents"], limit=self._SCAN_PAGE, offset=offset
+                )
+            except Exception:
+                return out
+            ids = got.get("ids", [])
+            docs = got.get("documents") or []
+            for rid, doc in zip(ids, docs):
+                out.append((str(rid), str(doc or "")))
+            if len(ids) < self._SCAN_PAGE:
+                return out
+            offset += len(ids)
+
+    def fetch(self, ids: Sequence[str]) -> dict[str, FolderHit]:
+        """Materialize FolderHits for specific ids (cosine score unknown -> 0.0).
+        Used to turn fused/graph-selected ids back into gallery rows."""
+        ids = list(ids)
+        out: dict[str, FolderHit] = {}
+        for i in range(0, len(ids), _UPSERT_BATCH):
+            batch = ids[i : i + _UPSERT_BATCH]
+            try:
+                got = self._col.get(ids=batch, include=["metadatas", "documents"])
+            except Exception:
+                continue
+            gids = got.get("ids", [])
+            metas = got.get("metadatas") or []
+            docs = got.get("documents") or []
+            for gid, md, doc in zip(gids, metas, docs):
+                out[str(gid)] = self._hit_from_meta(md, doc, 0.0)
+        return out

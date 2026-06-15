@@ -35,3 +35,20 @@ SUMMARY_USER = (
     "검색된 폴더 {n}개의 대표 설명:\n{context}\n\n"
     "위 결과를 1~2문장 한국어로 요약하세요. 가장 관련성 높은 폴더를 우선 언급하세요."
 )
+
+# --- agentic planner: decompose a query into a structured retrieval plan ---
+PLAN_SYSTEM = (
+    "당신은 이미지 검색 플래너입니다. 사용자의 한국어 요청을 의미 검색 텍스트와 "
+    "객체 필터로 분해합니다. 반드시 JSON만 출력합니다."
+)
+
+PLAN_USER = (
+    "사용 가능한 객체 클래스: {classes}\n"
+    "사용자 요청: {query}\n\n"
+    "다음 JSON 스키마로만 답하세요(설명·코드펜스 금지):\n"
+    '{{"semantic": "장면을 묘사하는 검색 텍스트", '
+    '"required_objects": ["반드시 포함할 클래스명"], '
+    '"excluded_objects": ["제외할 클래스명"]}}\n'
+    "required_objects/excluded_objects의 값은 위 클래스 목록에 있는 이름만 사용하고, "
+    "해당 없으면 빈 배열로 두세요."
+)

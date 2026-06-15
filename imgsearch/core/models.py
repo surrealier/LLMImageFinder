@@ -26,7 +26,13 @@ class RepImage:
 
 @dataclass
 class FolderHit:
-    """One search result row: a folder's representative image + why it matched."""
+    """One search result row: a folder's representative image + why it matched.
+
+    ``score`` is ALWAYS the cosine similarity (so the score-threshold UI filter means
+    the same thing in every search mode). ``fused_score`` is the reciprocal-rank-fusion
+    score used for ORDERING in hybrid/keyword mode (0.0 in pure vector mode). ``match``
+    records provenance: ""|"vector"|"keyword"|"both".
+    """
 
     folder: str
     image_path: str
@@ -34,6 +40,8 @@ class FolderHit:
     score: float
     member_count: int = 0
     sidecar_text: str = ""
+    fused_score: float = 0.0
+    match: str = ""
 
 
 @dataclass

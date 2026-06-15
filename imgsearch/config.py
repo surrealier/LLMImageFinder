@@ -49,7 +49,14 @@ class AppConfig:
     # --- retrieval / ui knobs ---
     top_k: int = 24
     score_threshold: float = 0.0  # hide hits below this similarity (display-side filter)
+    # retrieval mode: "vector" (CLIP only), "keyword" (BM25 only), "hybrid" (RRF of both)
+    search_mode: str = "hybrid"
+    agentic_enabled: bool = False  # route queries through the planner->retrieve->graph->summarize pipeline
     thumb_size: int = 256
+
+    # --- object graph (GraphDB) ---
+    graph_enabled: bool = True
+    graph_backend: str = "memory"  # "memory" (pure-python) | "kuzu" (embedded GraphDB)
     max_members_for_repr: int = 64
     image_exts: list[str] = field(default_factory=lambda: list(DEFAULT_IMAGE_EXTS))
 

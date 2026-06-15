@@ -17,6 +17,15 @@ MEMBERS_ROLE = Qt.UserRole + 5
 HIT_ROLE = Qt.UserRole + 6
 PATH_ROLE = Qt.UserRole + 7
 FAILED_ROLE = Qt.UserRole + 8  # thumbnail could not be generated (file gone/corrupt)
+MATCH_ROLE = Qt.UserRole + 9  # provenance: ""|"vector"|"keyword"|"both"|"graph"
+
+# provenance badge text + color
+_MATCH_BADGE = {
+    "vector": ("V", "#60a5fa"),
+    "keyword": ("K", "#fbbf24"),
+    "both": ("V+K", "#34d399"),
+    "graph": ("G", "#a78bfa"),
+}
 
 TILE_W = 224
 TILE_H = 250
@@ -81,9 +90,10 @@ class GalleryDelegate(QStyledItemDelegate):
         painter.setPen(QColor("#94a3b8"))
         painter.drawText(rect.x() + _PAD, y_name, fm.elidedText(name, Qt.ElideMiddle, inner_w))
 
-        # score badge (top-right of thumbnail)
+        # score badge (top-right of thumbnail) — skip when there's no real score
+        # (e.g. graph-membership hits that aren't ranked by cosine)
         score = index.data(SCORE_ROLE)
-        if score is not None:
+        if score is not None and float(score) > 0.0:
             txt = f"{float(score):.2f}"
             bw = fm.horizontalAdvance(txt) + 12
             bh = fm.height() + 4
@@ -93,5 +103,18 @@ class GalleryDelegate(QStyledItemDelegate):
             painter.fillPath(bpath, QColor(0, 0, 0, 160))
             painter.setPen(QColor("#7dd3fc"))
             painter.drawText(badge, Qt.AlignCenter, txt)
+
+        # provenance badge (top-left of thumbnail): V / K / V+K / G
+        mb = _MATCH_BADGE.get(str(index.data(MATCH_ROLE) or ""))
+        if mb:
+            mtxt, mcolor = mb
+            mbw = fm.horizontalAdvance(mtxt) + 10
+            mbh = fm.height() + 4
+            mbadge = QRect(thumb.x() + 4, thumb.y() + 4, mbw, mbh)
+            mpath = QPainterPath()
+            mpath.addRoundedRect(QRectF(mbadge), 6, 6)
+            painter.fillPath(mpath, QColor(0, 0, 0, 160))
+            painter.setPen(QColor(mcolor))
+            painter.drawText(mbadge, Qt.AlignCenter, mtxt)
 
         painter.restore()

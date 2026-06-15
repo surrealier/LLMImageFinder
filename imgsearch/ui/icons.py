@@ -94,3 +94,7 @@ def similar() -> QIcon:
 
 def eye() -> QIcon:
     return _i("fa5s.eye")
+
+
+def graph() -> QIcon:
+    return _i("fa5s.project-diagram", "#a78bfa")

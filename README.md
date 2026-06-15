@@ -10,15 +10,20 @@
 
 - **GUI**: PySide6 + qtawesome (다크 테마, 비차단 인덱싱/검색, 백그라운드 모델 로딩)
 - **벡터 DB**: ChromaDB (`PersistentClient`, cosine) — 리프 폴더당(또는 이미지당) 벡터 1개
+- **하이브리드 검색**: 벡터(CLIP) + 키워드(BM25, `rank-bm25`)를 **RRF**로 융합 — 의미·정확 매칭 결합
+- **GraphDB**: 객체 공출현 그래프 — 메모리(기본) 또는 **kuzu**(임베디드, Cypher, `[graph]` extra)
+- **멀티에이전트(RAG)**: 계획→하이브리드 검색→그래프 필터→요약 A2A 파이프라인 (트레이스 표시)
 - **임베딩(검색 핵심)**: `jinaai/jina-clip-v2` (다국어 CLIP, 한국어 텍스트→이미지 직접 검색, 배치 GPU 임베딩)
-- **VLM 캡션**: Qwen2.5-VL (vLLM, OpenAI 호환 API) — 대표 이미지의 한국어 설명 자동 추출
-- **sLLM 채팅**: Qwen (vLLM) — 질의 정제 + 결과 RAG 요약
-- **MOCK 모드**: ML 의존성 0으로도 **전체 기능이 즉시 동작** (결정적 임베딩 + 규칙 기반 한국어 처리)
+- **VLM 캡션 / sLLM 채팅**: Qwen2.5-VL (vLLM, OpenAI 호환 API) — 캡션 자동 추출 + 질의 정제·요약·계획(plan)
+- **MOCK 모드**: ML 의존성 0으로도 **전체 기능이 즉시 동작** (하이브리드·그래프·에이전트 포함, 결정적)
 
-### 주요 기능 (v0.2.0)
+### 주요 기능 (v0.3.0)
 
 | 기능 | 사용법 |
 |---|---|
+| 검색 방식 전환 | 갤러리 헤더 **콤보** — 하이브리드 / 벡터 / 키워드 |
+| 에이전트 검색 | 헤더 **에이전트** 체크 — 계획→검색→그래프 필터→요약, 단계 트레이스 표시 |
+| 객체 그래프 | 툴바 **객체 그래프** — 공출현 + "선택 객체 모두 포함한 이미지 보기"(AND) |
 | 검색어 히스토리 | 입력창에서 **↑/↓** |
 | 비슷한 이미지 검색 | 타일 **우클릭 → 비슷한 이미지 검색** (저장 임베딩 재사용, 즉시) |
 | YOLO 박스 오버레이 | 뷰어에서 **B** 또는 '라벨' 버튼 (클래스명·색상 표시) |
@@ -109,6 +114,34 @@ dataset_root/
 
 ---
 
+## 2.5 검색 방식 · 객체 그래프 · 에이전트 검색 (v0.3.0)
+
+### 하이브리드 검색
+갤러리 헤더의 **검색 방식** 콤보에서 고릅니다(설정 자동 저장).
+- **하이브리드**(기본): 벡터(CLIP 의미)와 키워드(BM25, 캡션/라벨 정확 매칭)를 RRF로 융합.
+- **벡터**: 의미 검색만. **키워드**: BM25만(클래스명 등 정확한 단어에 강함).
+
+점수 배지는 어느 모드에서나 코사인 유사도이고, 정렬은 융합 순위를 따릅니다.
+
+### 객체 그래프 (GraphDB)
+툴바 **객체 그래프**를 열면 YOLO 라벨에서 만든 공출현 그래프를 탐색할 수 있습니다.
+클래스별 이미지 수, 선택한 객체와 **함께 나타나는 객체**, 그리고 여러 객체를 체크해
+**모두 포함한 이미지만** 갤러리에 표시합니다. 기본은 메모리 백엔드(의존성 없음)이며,
+**설정 → 객체 그래프 백엔드**에서 `kuzu`(임베디드 GraphDB)로 바꿀 수 있습니다:
+
+```powershell
+uv sync --extra graph      # kuzu 설치 (없으면 자동으로 메모리 그래프로 폴백)
+```
+
+### 에이전트 검색 (멀티에이전트 RAG)
+헤더 **에이전트**를 켜면 질의가 **계획 → 하이브리드 검색 → 객체 그래프 필터 → 요약**
+파이프라인을 거치고, 각 단계가 채팅창에 트레이스로 표시됩니다. 예: "사람과 오토바이가
+함께 있는 이미지"는 플래너가 `필수=[사람, 오토바이]`로 분해 → 그래프가 두 객체를 모두
+포함한 이미지로 좁힙니다. vLLM이 연결되면 계획을 LLM(`plan()`)이 세우고, 아니면 규칙
+기반으로 결정적 동작합니다(MOCK 모드 포함).
+
+---
+
 ## 3. 실제 모델 활성화 (RTX 3070 8GB 기준)
 
 MOCK은 데모/오프라인용입니다. 실제 의미 검색·캡션·요약을 쓰려면 두 가지를 켭니다.
@@ -137,7 +170,14 @@ python -m vllm.entrypoints.openai.api_server \
 ```
 
 **설정** → **캡션(VLM)** 과 **채팅 sLLM** 에서 백엔드 `vllm`, Base URL `http://localhost:8000/v1`,
-모델 `Qwen/Qwen2.5-VL-3B-Instruct-AWQ` 입력. (하나의 Qwen2.5-VL 모델이 캡션과 채팅을 모두 처리)
+모델 `Qwen/Qwen2.5-VL-3B-Instruct-AWQ` 입력. (하나의 Qwen2.5-VL 모델이 캡션·채팅·에이전트 plan을 모두 처리)
+
+전환 전에 엔드포인트를 점검할 수 있습니다:
+
+```powershell
+uv run python scripts/check_vllm.py --base-url http://localhost:8000/v1 --model Qwen/Qwen2.5-VL-3B-Instruct
+# 연결 / refine / summarize / plan / (선택)caption 라운드트립을 PASS/FAIL로 출력
+```
 
 > 엔드포인트가 응답하지 않으면 자동으로 MOCK으로 폴백하고 배너에 사유를 표시합니다.
 > Ollama 등 다른 OpenAI 호환 서버도 동일하게 사용할 수 있습니다.
@@ -154,18 +194,21 @@ python -m vllm.entrypoints.openai.api_server \
 1. **인덱싱**: 데이터셋을 순회하며 리프 폴더마다 → 대표 이미지 선정(임베딩 중심값/`centroid`,
    모델 없으면 dHash medoid) → VLM 한국어 캡션 → CLIP 이미지 임베딩 → ChromaDB upsert.
    (mtime 기반 증분 업데이트, 진행률/취소 지원, UI 비차단)
-2. **검색**: 한국어 질의를 sLLM이 정제 → CLIP 텍스트 임베딩 → ChromaDB cosine top-k →
-   폴더별 대표 이미지 그리드 → 상위 결과 캡션을 근거로 sLLM이 한국어 요약(RAG).
-3. **표시**: 대표 이미지 타일(썸네일+캡션+폴더+유사도). 더블클릭 확대, ‘폴더 열기’로 탐색기.
+2. **검색**: 한국어 질의를 sLLM이 정제 → (하이브리드) CLIP 텍스트 임베딩 + BM25 키워드 →
+   RRF 융합 → ChromaDB top-k → 폴더별/이미지별 그리드 → 상위 결과 근거로 sLLM이 RAG 요약.
+3. **에이전트**: 플래너가 질의를 의미+객체 제약으로 분해 → 하이브리드 검색 → 객체 그래프로
+   필수/제외 객체 필터 → 요약. 단계별 트레이스를 채팅에 표시.
+4. **표시**: 대표 이미지 타일(썸네일+캡션+폴더+유사도). 더블클릭 확대, ‘폴더 열기’로 탐색기.
 
 ---
 
 ## 5. 개발 / 테스트
 
 ```powershell
-uv run --extra dev pytest          # 단위/통합 테스트 (mock, 모델 불필요)
-uv run python scripts/smoke.py     # 헤드리스 파이프라인 점검
-uv run python scripts/ui_smoke.py  # 오프스크린 GUI 점검
+uv run --extra dev pytest               # 단위/통합 테스트 (mock, 모델 불필요)
+uv run --extra dev --extra graph pytest # kuzu GraphDB 동등성 테스트까지 포함
+uv run python scripts/smoke.py          # 헤드리스 파이프라인 점검
+uv run python scripts/ui_smoke.py       # 오프스크린 GUI 점검
 ```
 
 ### 프로젝트 구조
@@ -174,20 +217,23 @@ uv run python scripts/ui_smoke.py  # 오프스크린 GUI 점검
 imgsearch/
   app.py / __main__.py        진입점·테마
   config.py / paths.py        설정(JSON) · 앱 데이터 경로
-  koutil.py                   한국어 토크나이즈/KO→EN 사전 (mock)
+  koutil.py                   한국어 토크나이즈/KO→EN 사전 (mock·BM25 공용)
   sample_data.py              합성 데이터셋 생성기
   thumbs.py                   썸네일 캐시 (PIL, 스레드 안전)
-  core/      models · services(SearchService) · registry(백엔드 팩토리)
-  backends/  base(Protocol) · mock · jina_clip · openai_compat · prompts
-  index/     walker · pairing · repr_select · indexer
-  store/     chroma_store
+  core/      models · services(SearchService: 하이브리드·RRF) · agentic(A2A) · registry
+  backends/  base(Protocol) · mock · jina_clip · openai_compat(plan 포함) · prompts
+  index/     walker · pairing · repr_select · indexer · lexical(BM25) · labels
+  store/     chroma_store (search_vector · all_documents · fetch · revision)
+  graph/     base(Protocol) · memory_graph · kuzu_graph · builder · registry
   ui/        main_window · chat_widget · results_gallery · gallery_delegate
-             image_viewer · settings_dialog · class_names_dialog
+             image_viewer · settings_dialog · class_names_dialog · graph_dialog
              index_info_dialog · mock_banner · icons · osutil
-  workers/   qworker · index_worker · query_worker · thumb_worker · preload_worker
-tests/       walker · pairing · repr_select · mock_embedder · chroma_store
+  workers/   qworker · index_worker · query_worker(trace) · thumb_worker
+             preload_worker · graph_worker
+tests/       walker · pairing · repr_select · mock_embedder · chroma_store · labels
              query_refine · indexer_query · class_names · config · services
-             build_pipeline (배치/정리/리포트) · labels
+             build_pipeline · hybrid · graph · agentic
+scripts/     smoke · ui_smoke · build_index · set_class_names · check_vllm · …
 ```
 
 ## 6. 문제 해결
@@ -198,4 +244,10 @@ tests/       walker · pairing · repr_select · mock_embedder · chroma_store
   실제 의미 검색은 jina-clip 백엔드에서 동작합니다.
 - **인덱싱이 느림**: 캡션(VLM)을 끄거나(설정), 임베딩 디바이스를 `cuda`로 두세요.
   증분 업데이트는 변경된 폴더만 다시 처리합니다.
+- **키워드/하이브리드 결과가 비어 있음**: BM25는 캡션의 *정확한 단어*에 매칭됩니다
+  (예: 캡션이 "휴대폰"이면 "스마트폰"으로는 안 잡힘). 의미 검색은 벡터/하이브리드가 담당.
+- **객체 그래프가 비어 있음**: YOLO 라벨이 있는 데이터셋을 색인해야 채워집니다. 인덱스
+  빌드 후 자동 구축되며, ‘객체 그래프’를 처음 열 때도 만들어집니다.
+- **에이전트 검색이 그래프 필터를 건너뜀**: 그래프가 아직 안 만들어졌거나 현재 인덱스와
+  경로가 다를 때입니다(전체 재빌드 권장). 이 경우 하이브리드 결과를 그대로 보여줍니다.
 - **로그**: `%LOCALAPPDATA%\MarkAny\ImgSearch\logs\imgsearch.log`

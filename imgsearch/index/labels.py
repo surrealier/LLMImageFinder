@@ -85,6 +85,18 @@ def yolo_caption(path: str | Path, class_names: Optional[dict] = None) -> str:
     return caption_from_boxes(parse_yolo(path), class_names)
 
 
+def names_in(boxes: Sequence[Box], class_names: Optional[dict] = None) -> list[str]:
+    """Unique display names present in the boxes, order-stable (for the object graph)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for b in boxes:
+        nm = _name(class_names, b[0])
+        if nm not in seen:
+            seen.add(nm)
+            out.append(nm)
+    return out
+
+
 def scan_class_ids(root: str | Path, image_exts: Sequence[str]) -> Counter:
     """Counter of class-id -> total box count across all YOLO sidecars under root.
 

@@ -112,6 +112,19 @@ def test_query_by_example_reuses_stored_embedding(tmp_path):
     assert "유사 이미지" in res.query
 
 
+def test_query_by_example_missing_embedding_never_embeds(tmp_path):
+    # if the stored vector is gone (e.g. granularity changed without a rebuild),
+    # query_by_example must NOT embed on the calling thread — return empty instead
+    from imgsearch.core.models import FolderHit
+
+    cfg, emb, store, chat = _build_image_index(tmp_path)
+    svc = SearchService(_MustNotEmbed(), store, chat, cfg)
+    ghost = FolderHit(folder="/nope", image_path="/nope/missing.jpg", caption="", score=0.0)
+    res = svc.query_by_example(ghost, k=5)
+    assert res.hits == []
+    assert "임베딩" in res.summary  # explanatory, no crash, no embed
+
+
 def test_query_by_example_folder_granularity(tmp_path, sample_ds):
     cfg = AppConfig(dataset_root=str(sample_ds))
     emb, cap, chat = build_backends(cfg)
