@@ -8,6 +8,9 @@
 폴더별 **대표 이미지 한 장**(또는 이미지별 개별 레코드)을 그리드로 보여주고,
 더블클릭하면 확대(확대/이동/←→ 탐색), ‘폴더 열기’로 탐색기에서 원본 위치를 엽니다.
 
+> 📐 **기술 구성·설계 철학**(RAG·VectorDB·하이브리드·GraphDB·멀티에이전트·vLLM)은
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)에 정리되어 있습니다. 코드 전반에는 한글 주석이 달려 있습니다.
+
 - **GUI**: PySide6 + qtawesome (다크 테마, 비차단 인덱싱/검색, 백그라운드 모델 로딩)
 - **벡터 DB**: ChromaDB (`PersistentClient`, cosine) — 리프 폴더당(또는 이미지당) 벡터 1개
 - **하이브리드 검색**: 벡터(CLIP) + 키워드(BM25, `rank-bm25`)를 **RRF**로 융합 — 의미·정확 매칭 결합

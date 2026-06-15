@@ -1,4 +1,8 @@
-"""Responsive gallery of result tiles with context menu + keyboard actions."""
+"""결과 타일을 반응형으로 배치하는 갤러리 — 컨텍스트 메뉴 + 키보드 동작 지원.
+
+썸네일은 백그라운드 스레드풀에서 비동기 디코딩되며, 검색이 바뀔 때마다 세대(generation)
+번호로 구분해 이전 검색의 뒤늦은 썸네일 전달을 무시한다(엉뚱한 이미지가 박히는 것을 방지).
+"""
 
 from __future__ import annotations
 
@@ -32,45 +36,51 @@ from imgsearch.workers.thumb_worker import ThumbSignals, ThumbTask
 
 
 class ResultsGallery(QListView):
-    activated_hit = Signal(object)  # FolderHit (double-click / Enter)
-    selected_hit = Signal(object)  # FolderHit | None (selection change)
+    """검색 결과를 아이콘 격자로 보여 주는 뷰 — 썸네일 비동기 로딩과 사용자 상호작용을 담당."""
+
+    activated_hit = Signal(object)  # FolderHit (더블클릭 / Enter)
+    selected_hit = Signal(object)  # FolderHit | None (선택 변경)
     similar_requested = Signal(object)  # FolderHit ("비슷한 이미지 검색")
 
     def __init__(self, thumb_size: int = 256, parent=None) -> None:
+        """아이콘 모드 격자 뷰를 구성하고, 썸네일 디코딩용 스레드풀과 시그널을 연결한다."""
         super().__init__(parent)
         self._thumb_size = thumb_size
-        self.setViewMode(QListView.IconMode)
-        self.setResizeMode(QListView.Adjust)
-        self.setMovement(QListView.Static)
+        self.setViewMode(QListView.IconMode)  # 격자형 아이콘 배치
+        self.setResizeMode(QListView.Adjust)  # 폭이 바뀌면 타일을 자동 재배치(반응형)
+        self.setMovement(QListView.Static)  # 사용자가 타일을 드래그로 옮기지 못하게 고정
         self.setWrapping(True)
-        self.setUniformItemSizes(True)
+        self.setUniformItemSizes(True)  # 모든 타일 크기가 같다고 알려 줘 레이아웃을 빠르게
         self.setSpacing(8)
         self.setGridSize(QSize(TILE_W, TILE_H))
-        self.setMouseTracking(True)
+        self.setMouseTracking(True)  # 마우스 호버 효과(델리게이트의 hovered)를 위해 필요
         self.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 가로 스크롤 없이 줄바꿈만
 
         self._model = QStandardItemModel(self)
         self.setModel(self._model)
-        self.setItemDelegate(GalleryDelegate(self))
+        self.setItemDelegate(GalleryDelegate(self))  # 타일을 직접 그리는 커스텀 델리게이트
 
-        self._pool = QThreadPool(self)  # gallery-owned so it drains on close
+        self._pool = QThreadPool(self)  # 갤러리 소유 풀 — 닫을 때 함께 비우기 위함
+        # 워커 수: CPU-1 정도로 두되 2~8 범위로 제한(과도한 동시 디코딩으로 UI가 굶지 않게).
         self._pool.setMaxThreadCount(max(2, min(8, (os.cpu_count() or 4) - 1)))
         self._sig = ThumbSignals()
-        self._sig.done.connect(self._on_thumb)
-        self._by_path: dict[str, QStandardItem] = {}
-        self._gen = 0  # bumped each query; stale-task deliveries are ignored
+        self._sig.done.connect(self._on_thumb)  # 워커 → GUI 스레드로 완료 썸네일 전달
+        self._by_path: dict[str, QStandardItem] = {}  # 경로 → 해당 타일 아이템(완료 시 역참조)
+        self._gen = 0  # 검색마다 +1. 이전 세대의 뒤늦은 작업 결과는 무시한다.
 
         self.doubleClicked.connect(self._on_double)
         self.selectionModel().currentChanged.connect(self._on_current)
 
     def set_thumb_size(self, size: int) -> None:
+        """다음 검색부터 사용할 썸네일 크기를 갱신한다(현재 표시 중인 타일은 그대로)."""
         self._thumb_size = int(size)
 
     def set_results(self, hits: Sequence[FolderHit]) -> None:
+        """결과 리스트로 모델을 다시 채우고, 각 이미지의 썸네일 디코딩 작업을 풀에 넣는다."""
         self._model.clear()
         self._by_path.clear()
-        self._gen += 1
+        self._gen += 1  # 새 검색 — 세대 번호를 올려 이전 검색의 썸네일 전달을 무효화
         gen = self._gen
         for hit in hits:
             item = QStandardItem()
