@@ -62,7 +62,7 @@ from imgsearch.workers.qworker import ThreadRunner
 from imgsearch.workers.query_worker import QueryWorker
 
 # 검색 방식 콤보박스용 (표시 라벨, 내부 값) 쌍. 표시 문자열은 한국어, 값은 코드에서 쓰는 식별자.
-_MODE_LABELS = [("하이브리드", "hybrid"), ("벡터", "vector"), ("키워드", "keyword")]
+_MODE_LABELS = [("Hybrid", "hybrid"), ("Vector", "vector"), ("Keyword", "keyword")]
 
 
 def _index_signature(cfg: AppConfig) -> tuple:
@@ -134,7 +134,7 @@ class MainWindow(QMainWindow):
         self._display_hits: list = []  # 점수 임계값 필터를 거친 화면 표시용 결과
         self._graph_runner: ThreadRunner | None = None
 
-        self.setWindowTitle("데이터셋 검색 — sLLM 이미지 탐색")
+        self.setWindowTitle("LLMImageFinder — sLLM image search")
         self.resize(1240, 820)
 
         # 벡터 스토어는 백엔드 선택과 무관하므로 한 번만 만든다(설정이 바뀌어도 재생성하지 않음).
@@ -183,7 +183,7 @@ class MainWindow(QMainWindow):
     def _start_preload(self) -> None:
         """실제 백엔드 가중치를 백그라운드 스레드에서 로딩 시작 — 그동안 색인 버튼은 비활성화."""
         self._update_model_chip()
-        self.status_msg.setText("임베딩 모델 로딩 중…")
+        self.status_msg.setText("Loading embedding model…")
         self.act_index.setEnabled(False)
         self.act_rebuild.setEnabled(False)
         worker = PreloadWorker(self.cfg)
@@ -204,7 +204,7 @@ class MainWindow(QMainWindow):
         self._apply_banner()
         self._refresh_status()
         name = getattr(self.embedder, "name", "?")
-        self.chat_widget.add_system(f"모델 로딩 완료 ({name}) — 검색을 시작할 수 있습니다.")
+        self.chat_widget.add_system(f"Model loaded ({name}) — ready to search.")
 
     def _on_preload_error(self, msg: str) -> None:
         """프리로드 실패 콜백(GUI 스레드) — placeholder mock에 머무르며 사용자에게 사유 안내."""
@@ -214,7 +214,7 @@ class MainWindow(QMainWindow):
         self._preload_runner = None
         self.act_index.setEnabled(True)
         self.act_rebuild.setEnabled(True)
-        self.cfg.mark_degraded(f"백엔드 로드 실패: {msg}")  # 배너에 표시할 degraded 사유 기록
+        self.cfg.mark_degraded(f"Backend load failed: {msg}")  # 배너에 표시할 degraded 사유 기록
         self._update_model_chip()
         self._apply_banner()
         self._refresh_status()
@@ -231,13 +231,13 @@ class MainWindow(QMainWindow):
     def _update_model_chip(self) -> None:
         """상태바의 모델 칩(현재 임베딩 모델/디바이스 표시)을 로딩 상태에 맞춰 갱신한다."""
         if not self._backends_ready:
-            self.model_chip.setText("모델 로딩 중…")
+            self.model_chip.setText("Loading model…")
             self.model_chip.setStyleSheet("color:#f59e0b; padding:0 8px;")
             return
         # 백엔드마다 name/device 속성이 없을 수 있어 getattr로 안전하게 읽는다.
         name = getattr(self.embedder, "name", "?")
         device = getattr(self.embedder, "device", "")
-        self.model_chip.setText(f"임베딩: {name}" + (f" ({device})" if device else ""))
+        self.model_chip.setText(f"Embedding: {name}" + (f" ({device})" if device else ""))
         self.model_chip.setStyleSheet("color:#34d399; padding:0 8px;")
 
     # ---------------------------------------------------------------- UI 구성
@@ -246,19 +246,19 @@ class MainWindow(QMainWindow):
         tb = self.addToolBar("main")
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.act_index = tb.addAction(icons.index(), "인덱스 빌드/업데이트", self.start_index_update)
+        self.act_index = tb.addAction(icons.index(), "Build / update index", self.start_index_update)
         self.act_index.setShortcut(QKeySequence("F5"))
-        self.act_index.setToolTip("변경된 파일만 색인하고 삭제된 레코드를 정리합니다 (F5)")
-        self.act_rebuild = tb.addAction(icons.rebuild(), "전체 재빌드", self.start_full_rebuild)
-        self.act_rebuild.setToolTip("기존 인덱스를 모두 지우고 처음부터 다시 색인합니다")
+        self.act_index.setToolTip("Index only changed files and prune deleted records (F5)")
+        self.act_rebuild = tb.addAction(icons.rebuild(), "Full rebuild", self.start_full_rebuild)
+        self.act_rebuild.setToolTip("Clear the whole index and re-index from scratch")
         tb.addSeparator()
-        tb.addAction(icons.tags(), "클래스 이름", self.edit_class_names)
-        tb.addAction(icons.graph(), "객체 그래프", self.show_object_graph)
-        tb.addAction(icons.info(), "인덱스 정보", self.show_index_info)
+        tb.addAction(icons.tags(), "Class names", self.edit_class_names)
+        tb.addAction(icons.graph(), "Object graph", self.show_object_graph)
+        tb.addAction(icons.info(), "Index info", self.show_index_info)
         tb.addSeparator()
-        tb.addAction(icons.images(), "샘플 데이터셋 생성", self.make_sample)
+        tb.addAction(icons.images(), "Generate sample dataset", self.make_sample)
         tb.addSeparator()
-        tb.addAction(icons.settings(), "설정", self.open_settings)
+        tb.addAction(icons.settings(), "Settings", self.open_settings)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -283,7 +283,7 @@ class MainWindow(QMainWindow):
         rlay = QVBoxLayout(right)
         rlay.setContentsMargins(4, 4, 4, 4)
         header = QHBoxLayout()
-        title = QLabel("검색 결과")
+        title = QLabel("Search results")
         title.setStyleSheet("font-weight:600; color:#cbd5e1;")
         header.addWidget(title)
         header.addStretch(1)
@@ -295,45 +295,45 @@ class MainWindow(QMainWindow):
         # 저장된 cfg.search_mode에 해당하는 항목을 선택. 못 찾으면 0번(하이브리드)으로 폴백.
         cur = next((i for i, (_, d) in enumerate(_MODE_LABELS) if d == self.cfg.search_mode), 0)
         self.mode_combo.setCurrentIndex(cur)
-        self.mode_combo.setToolTip("검색 방식 — 하이브리드(벡터+키워드), 벡터(의미), 키워드(BM25)")
+        self.mode_combo.setToolTip("Search mode — Hybrid (vector+keyword), Vector (semantic), Keyword (BM25)")
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         header.addWidget(self.mode_combo)
 
-        self.agent_check = QCheckBox("에이전트")
+        self.agent_check = QCheckBox("Agent")
         self.agent_check.setChecked(bool(self.cfg.agentic_enabled))
         self.agent_check.setToolTip(
-            "에이전트 검색 — 계획→하이브리드 검색→객체 그래프 필터→요약 단계를 거칩니다"
+            "Agentic search — plan → hybrid search → object-graph filter → summarize"
         )
         self.agent_check.toggled.connect(self._on_agentic_toggled)
         header.addWidget(self.agent_check)
 
-        header.addWidget(QLabel("결과 수"))
+        header.addWidget(QLabel("Results"))
         self.k_spin = QSpinBox()
         self.k_spin.setRange(1, 200)
         self.k_spin.setValue(int(self.cfg.top_k))
-        self.k_spin.setToolTip("다음 검색부터 가져올 결과 개수 (top-k)")
+        self.k_spin.setToolTip("Number of results to fetch on the next search (top-k)")
         self.k_spin.valueChanged.connect(self._on_k_changed)
         header.addWidget(self.k_spin)
 
-        header.addWidget(QLabel("점수 ≥"))
+        header.addWidget(QLabel("Score ≥"))
         self.thr_spin = QDoubleSpinBox()
         self.thr_spin.setRange(0.0, 1.0)
         self.thr_spin.setSingleStep(0.05)
         self.thr_spin.setDecimals(2)
         self.thr_spin.setValue(float(self.cfg.score_threshold))
-        self.thr_spin.setToolTip("이 유사도 점수 미만의 결과를 숨깁니다 (재검색 없이 즉시 적용)")
+        self.thr_spin.setToolTip("Hide results below this similarity score (applied instantly, no re-search)")
         self.thr_spin.valueChanged.connect(self._on_threshold_changed)
         header.addWidget(self.thr_spin)
 
         # 내보내기 드롭다운(CSV 저장 / 경로 복사) — 결과가 있을 때만 활성화된다(_apply_display_filter).
         self.export_btn = QToolButton()
         self.export_btn.setIcon(icons.export())
-        self.export_btn.setText(" 내보내기")
+        self.export_btn.setText(" Export")
         self.export_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.export_btn.setPopupMode(QToolButton.InstantPopup)  # 클릭 즉시 메뉴 펼침
         emenu = QMenu(self.export_btn)
-        emenu.addAction("CSV로 저장…", self.export_csv)
-        emenu.addAction("경로 목록 복사", self.copy_result_paths)
+        emenu.addAction("Save as CSV…", self.export_csv)
+        emenu.addAction("Copy path list", self.copy_result_paths)
         self.export_btn.setMenu(emenu)
         self.export_btn.setEnabled(False)  # 검색 결과가 생기기 전까지 비활성
         header.addWidget(self.export_btn)
@@ -341,8 +341,8 @@ class MainWindow(QMainWindow):
         self.count_label = QLabel("")
         self.count_label.setStyleSheet("color:#94a3b8;")
         header.addWidget(self.count_label)
-        self.open_folder_btn = QPushButton(icons.folder(), " 폴더 열기")
-        self.open_folder_btn.setToolTip("선택한 이미지를 탐색기에서 열기 (Ctrl+E)")
+        self.open_folder_btn = QPushButton(icons.folder(), " Open folder")
+        self.open_folder_btn.setToolTip("Reveal the selected image in Explorer (Ctrl+E)")
         self.open_folder_btn.setEnabled(False)
         self.open_folder_btn.clicked.connect(self.open_selected_folder)
         header.addWidget(self.open_folder_btn)
@@ -362,7 +362,7 @@ class MainWindow(QMainWindow):
         splitter.setSizes([440, 800])
 
         # 상태바: 메시지 + 모델 칩 + 진행 막대 + 취소 버튼
-        self.status_msg = QLabel("준비됨")
+        self.status_msg = QLabel("Ready")
         self.statusBar().addWidget(self.status_msg, 1)
         self.model_chip = QLabel("")
         self.statusBar().addPermanentWidget(self.model_chip)
@@ -370,7 +370,7 @@ class MainWindow(QMainWindow):
         self.progress.setMaximumWidth(320)
         self.progress.setVisible(False)
         self.statusBar().addPermanentWidget(self.progress)
-        self.cancel_btn = QPushButton(icons.cancel(), " 취소")
+        self.cancel_btn = QPushButton(icons.cancel(), " Cancel")
         self.cancel_btn.setVisible(False)  # 색인이 진행 중일 때만 노출
         self.statusBar().addPermanentWidget(self.cancel_btn)
 
@@ -387,8 +387,8 @@ class MainWindow(QMainWindow):
         self._refresh_status()
         if not self.cfg.dataset_root:
             self.chat_widget.add_system(
-                "데이터셋 루트가 설정되지 않았습니다. 툴바의 ‘설정’에서 폴더를 지정하거나, "
-                "‘샘플 데이터셋 생성’으로 예시 데이터를 만든 뒤 ‘인덱스 빌드’를 실행하세요."
+                "No dataset root is set. Choose a folder in the toolbar 'Settings', or "
+                "use 'Generate sample dataset' to create example data, then run 'Build index'."
             )
         # 저장된 인덱스가 '다른' 데이터셋 경로에서 만들어졌다면 경고(불일치한 결과 방지).
         meta = load_index_meta(self.paths.index_meta_file)
@@ -400,8 +400,8 @@ class MainWindow(QMainWindow):
             and self.store.count() > 0
         ):
             self.chat_widget.add_system(
-                "주의: 현재 인덱스는 다른 데이터셋 경로에서 생성되었습니다. "
-                "툴바의 ‘인덱스 정보’를 확인하고 필요하면 전체 재빌드를 실행하세요."
+                "Note: the current index was built from a different dataset path. "
+                "Check 'Index info' in the toolbar and run a full rebuild if needed."
             )
         # 에이전트 모드가 이미 켜져 있으면, 그것이 의존하는 객체 그래프를 미리 빌드해 둔다.
         if self.cfg.agentic_enabled and self.store.count() > 0:
@@ -409,13 +409,13 @@ class MainWindow(QMainWindow):
 
     def _unit_label(self) -> str:
         """색인 단위에 맞는 한국어 단위 명사("이미지" 또는 "폴더")를 돌려준다(메시지 표기용)."""
-        return "이미지" if self.cfg.index_granularity == "image" else "폴더"
+        return "image" if self.cfg.index_granularity == "image" else "folder"
 
     def _refresh_status(self) -> None:
         """현재 색인 개수를 상태바·결과 카운트 라벨·모델 칩에 반영한다."""
         n = self.store.count()
-        self.count_label.setText(f"색인된 {self._unit_label()}: {n}개")
-        self.status_msg.setText(f"준비됨 · 색인 {n}개")
+        self.count_label.setText(f"Indexed {self._unit_label()}s: {n}")
+        self.status_msg.setText(f"Ready · {n} indexed")
         self._update_model_chip()
 
     # ---------------------------------------------------------------- 검색
@@ -425,13 +425,13 @@ class MainWindow(QMainWindow):
         세 가지 게이트: (1) 색인 진행 중 아님, (2) 백엔드 로딩 완료, (3) 인덱스가 비어 있지 않음.
         """
         if self._index_runner is not None and self._index_runner.is_running():
-            self.chat_widget.add_system("인덱싱이 진행 중입니다. 완료 후 다시 검색해 주세요.")
+            self.chat_widget.add_system("Indexing is in progress. Please search again when it finishes.")
             return False
         if not self._backends_ready:
-            self.chat_widget.add_system("임베딩 모델을 로딩하는 중입니다 — 잠시 후 다시 시도해 주세요.")
+            self.chat_widget.add_system("The embedding model is loading — please try again in a moment.")
             return False
         if self.store.count() == 0:
-            self.chat_widget.add_system("인덱스가 비어 있습니다. 먼저 ‘인덱스 빌드/업데이트’를 실행하세요.")
+            self.chat_widget.add_system("The index is empty. Run 'Build / update index' first.")
             return False
         return True
 
@@ -441,14 +441,14 @@ class MainWindow(QMainWindow):
         에이전트 모드면 agent를 함께 넘겨 계획→검색→그래프 필터→요약 파이프라인을 태운다.
         """
         if self._query_runner is not None:
-            self.chat_widget.add_system("이전 검색이 진행 중입니다 — 완료 후 다시 시도해 주세요.")
+            self.chat_widget.add_system("A previous search is still running — please try again when it finishes.")
             return
         self.chat_widget.add_user(text)
         if not self._ready_for_query():
             return
         self.chat_widget.set_busy(True)  # 입력창/전송 버튼 잠금
         agentic = bool(self.cfg.agentic_enabled)
-        self.status_msg.setText("에이전트 검색 중…" if agentic else "검색 중…")
+        self.status_msg.setText("Agentic search…" if agentic else "Searching…")
 
         agent = self.agent if agentic else None
         worker = QueryWorker(self.service, text, self.cfg.top_k, agent=agent)
@@ -474,19 +474,19 @@ class MainWindow(QMainWindow):
         if not self._ready_for_query():
             return
         name = os.path.basename(hit.image_path or hit.folder)
-        self.chat_widget.add_user(f"(유사 이미지 검색) {name}")
+        self.chat_widget.add_user(f"(find similar) {name}")
         QGuiApplication.setOverrideCursor(Qt.WaitCursor)  # 동기 작업 동안 모래시계 커서
         try:
             result = self.service.query_by_example(hit, self.cfg.top_k)
         except Exception as e:
-            self.chat_widget.add_system(f"유사 검색 오류: {type(e).__name__}: {e}")
+            self.chat_widget.add_system(f"Similar-search error: {type(e).__name__}: {e}")
             return
         finally:
             QGuiApplication.restoreOverrideCursor()  # 예외가 나도 커서는 반드시 복구
         self._last_hits = list(result.hits)
         self._apply_display_filter()
         self.chat_widget.add_assistant(
-            f"'{name}'와(과) 유사한 결과 {len(result.hits)}개를 찾았습니다."
+            f"Found {len(result.hits)} results similar to '{name}'."
         )
 
     def _apply_display_filter(self) -> None:
@@ -503,9 +503,9 @@ class MainWindow(QMainWindow):
         self.export_btn.setEnabled(bool(hits))  # 표시할 결과가 있을 때만 내보내기 허용
         # 필터로 일부가 가려졌으면 "표시 N / 검색 M"으로, 아니면 "검색 결과: N개"로 카운트 표기.
         if self._last_hits and len(hits) != len(self._last_hits):
-            self.count_label.setText(f"표시 {len(hits)} / 검색 {len(self._last_hits)}개")
+            self.count_label.setText(f"Showing {len(hits)} / {len(self._last_hits)} found")
         else:
-            self.count_label.setText(f"검색 결과: {len(hits)}개")
+            self.count_label.setText(f"Search results: {len(hits)}")
 
     def _on_query_done(self, result) -> None:
         """검색 워커 완료 콜백 — 결과를 저장/표시하고 요약을 채팅에 출력, busy 해제."""
@@ -513,19 +513,19 @@ class MainWindow(QMainWindow):
         self._apply_display_filter()
         if result.hits:
             self.chat_widget.add_assistant(
-                result.summary or f"{len(result.hits)}개의 관련 결과를 찾았습니다."
+                result.summary or f"Found {len(result.hits)} related results."
             )
         else:
-            self.chat_widget.add_system("일치하는 결과가 없습니다. 다른 표현으로 검색해 보세요.")
+            self.chat_widget.add_system("No matching results. Try different wording.")
         self.chat_widget.set_busy(False)  # 입력창/전송 버튼 다시 활성화
-        self.status_msg.setText("준비됨")
+        self.status_msg.setText("Ready")
         self._query_runner = None  # 다음 검색을 허용
 
     def _on_query_error(self, msg: str) -> None:
         """검색 워커 오류 콜백 — 채팅에 오류를 알리고 busy/runner 상태를 정리한다."""
-        self.chat_widget.add_system(f"검색 오류: {msg}")
+        self.chat_widget.add_system(f"Search error: {msg}")
         self.chat_widget.set_busy(False)
-        self.status_msg.setText("오류")
+        self.status_msg.setText("Error")
         self._query_runner = None
 
     def _on_k_changed(self, value: int) -> None:
@@ -574,7 +574,7 @@ class MainWindow(QMainWindow):
                 pass  # count 실패는 무시하고 그냥 빌드 진행
         worker = GraphBuildWorker(self.graph, root, self.cfg)
         worker.finished.connect(self._on_graph_built)
-        worker.error.connect(lambda m: self.chat_widget.add_system(f"객체 그래프 빌드 오류: {m}"))
+        worker.error.connect(lambda m: self.chat_widget.add_system(f"Object-graph build error: {m}"))
         self._graph_runner = ThreadRunner(worker, self)
         self._graph_runner.start()
 
@@ -582,12 +582,12 @@ class MainWindow(QMainWindow):
         """그래프 빌드 완료 콜백 — runner를 비우고, 라벨 이미지가 있으면 상태바에 개수 표시."""
         self._graph_runner = None
         if n > 0:
-            self.status_msg.setText(f"객체 그래프 준비됨 — 라벨 이미지 {n}개")
+            self.status_msg.setText(f"Object graph ready — {n} labeled images")
 
     def show_object_graph(self) -> None:
         """객체 그래프 다이얼로그를 연다. 비어 있으면 (사용자 요청이므로) 동기로 즉시 빌드한다."""
         if self._graph_runner is not None and self._graph_runner.is_running():
-            QMessageBox.information(self, "그래프 빌드 중", "객체 그래프를 만드는 중입니다. 잠시 후 다시 열어주세요.")
+            QMessageBox.information(self, "Building graph", "The object graph is being built. Please reopen it in a moment.")
             return
         try:
             empty = self.graph.count() == 0
@@ -596,8 +596,8 @@ class MainWindow(QMainWindow):
         if empty:
             if not self.cfg.dataset_root or not os.path.isdir(self.cfg.dataset_root):
                 QMessageBox.information(
-                    self, "그래프 없음",
-                    "YOLO 라벨이 있는 데이터셋을 색인한 뒤 사용할 수 있습니다.",
+                    self, "No graph",
+                    "Available after indexing a dataset that has YOLO labels.",
                 )
                 return
             # 사용자가 명시적으로 그래프를 요청했으므로 여기서는 동기로 빌드한다(백그라운드 X).
@@ -616,14 +616,14 @@ class MainWindow(QMainWindow):
     def _show_graph_images(self, paths: list) -> None:
         """그래프 다이얼로그에서 고른 객체 조합에 해당하는 이미지들을 결과 갤러리에 표시한다."""
         if not paths:
-            self.chat_widget.add_system("선택한 객체 조합을 모두 포함한 이미지가 없습니다.")
+            self.chat_widget.add_system("No images contain all of the selected objects.")
             return
         # image_id로 조인한다(그래프는 원본 경로를 저장하지만 인덱스는 image_id를 키로 쓴다).
         hit_map = self.store.fetch([image_id(p) for p in paths])
         hits = list(hit_map.values())
         if not hits:
             self.chat_widget.add_system(
-                "그래프가 현재 인덱스와 일치하지 않습니다 — 전체 재빌드를 권장합니다."
+                "The graph doesn't match the current index — a full rebuild is recommended."
             )
             return
         for h in hits:
@@ -632,9 +632,9 @@ class MainWindow(QMainWindow):
         self._apply_display_filter()
         if len(hits) < len(paths):
             self.chat_widget.add_system(
-                f"그래프 {len(paths)}건 중 {len(hits)}건만 현재 인덱스에 있습니다 — 전체 재빌드를 권장합니다."
+                f"Only {len(hits)} of {len(paths)} graph images are in the current index — a full rebuild is recommended."
             )
-        self.chat_widget.add_assistant(f"객체 그래프 필터 결과 {len(hits)}개를 표시합니다.")
+        self.chat_widget.add_assistant(f"Showing {len(hits)} results from the object-graph filter.")
 
     # ---------------------------------------------------------------- 내보내기
     def export_csv(self) -> None:
@@ -643,7 +643,7 @@ class MainWindow(QMainWindow):
         if not hits:
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "검색 결과를 CSV로 저장", "search_results.csv", "CSV 파일 (*.csv)"
+            self, "Save search results as CSV", "search_results.csv", "CSV files (*.csv)"
         )
         if not path:
             return  # 사용자가 저장 대화상자를 취소함
@@ -655,9 +655,9 @@ class MainWindow(QMainWindow):
                 for h in hits:
                     w.writerow([f"{h.score:.4f}", h.caption, h.image_path, h.folder, h.member_count])
         except OSError as e:
-            QMessageBox.warning(self, "저장 실패", str(e))
+            QMessageBox.warning(self, "Save failed", str(e))
             return
-        self.chat_widget.add_system(f"CSV 저장 완료 — {len(hits)}행: {path}")
+        self.chat_widget.add_system(f"CSV saved — {len(hits)} rows: {path}")
 
     def copy_result_paths(self) -> None:
         """표시 중인 결과의 이미지 경로들을 줄바꿈으로 이어 클립보드에 복사한다."""
@@ -665,7 +665,7 @@ class MainWindow(QMainWindow):
         if not hits:
             return
         QGuiApplication.clipboard().setText("\n".join(h.image_path for h in hits))
-        self.chat_widget.add_system(f"이미지 경로 {len(hits)}개를 클립보드에 복사했습니다.")
+        self.chat_widget.add_system(f"Copied {len(hits)} image paths to the clipboard.")
 
     # ---------------------------------------------------------------- 색인(인덱싱)
     def start_index_update(self) -> None:
@@ -676,8 +676,8 @@ class MainWindow(QMainWindow):
         """툴바 '전체 재빌드' — 기존 인덱스를 모두 지우고 처음부터 다시 색인(확인 후)."""
         if self.store.count() > 0:
             ok = QMessageBox.question(
-                self, "전체 재빌드",
-                "기존 인덱스를 모두 지우고 처음부터 다시 색인합니다. 계속할까요?",
+                self, "Full rebuild",
+                "This clears the whole index and re-indexes from scratch. Continue?",
             )
             if ok != QMessageBox.Yes:
                 return
@@ -706,17 +706,17 @@ class MainWindow(QMainWindow):
         # 다른 도구(예: 학습 파이프라인)와 공유할 수 있도록 표준 YAML로도 함께 기록.
         save_class_names_yaml(self.paths.class_names_file, new_names)
         self.chat_widget.add_system(
-            f"클래스 이름 {len(new_names)}개 저장됨 → {self.paths.class_names_file}"
+            f"Saved {len(new_names)} class names → {self.paths.class_names_file}"
         )
         return True
 
     def edit_class_names(self) -> None:
         """툴바 '클래스 이름' — 라벨을 스캔해 이름을 편집하고, 가능하면 캡션만 빠르게 갱신한다."""
         if self._index_runner is not None and self._index_runner.is_running():
-            QMessageBox.information(self, "인덱싱 진행 중", "인덱싱이 끝난 뒤 변경하세요.")
+            QMessageBox.information(self, "Indexing in progress", "Change it after indexing finishes.")
             return
         if self._query_runner is not None and self._query_runner.is_running():
-            QMessageBox.information(self, "검색 진행 중", "검색이 끝난 뒤 변경하세요.")
+            QMessageBox.information(self, "Search in progress", "Change it after the search finishes.")
             return
         root = self.cfg.dataset_root
         counts: dict[str, int] = {}
@@ -724,8 +724,8 @@ class MainWindow(QMainWindow):
             counts = self._scan_class_ids(root)
         if not counts and not self.cfg.class_names:
             QMessageBox.information(
-                self, "클래스 없음",
-                "데이터셋에서 YOLO 라벨 파일을 찾지 못했습니다. (이름은 라벨이 있는 데이터셋에서만 사용됩니다)",
+                self, "No classes",
+                "No YOLO label files found in the dataset. (Names are only used for labeled datasets.)",
             )
             return
         changed = self._prompt_class_names(counts)
@@ -740,8 +740,8 @@ class MainWindow(QMainWindow):
             and gran_ok
         ):
             ok = QMessageBox.question(
-                self, "캡션 갱신",
-                "저장된 인덱스의 캡션에 새 이름을 반영할까요?\n(재임베딩 없이 라벨 캡션만 빠르게 갱신합니다)",
+                self, "Refresh captions",
+                "Apply the new names to the stored index captions?\n(Refreshes label captions only, with no re-embedding.)",
             )
             if ok == QMessageBox.Yes:
                 self._start_index(full_rebuild=False, refresh=True)
@@ -760,17 +760,17 @@ class MainWindow(QMainWindow):
         full_rebuild=True면 전체 재빌드, refresh=True면 재임베딩 없이 캡션만 갱신.
         """
         if self._index_runner is not None:
-            self.chat_widget.add_system("이미 인덱싱이 진행 중입니다 — 완료 후 다시 실행하세요.")
+            self.chat_widget.add_system("Indexing is already in progress — run again when it finishes.")
             return
         if self._query_runner is not None and self._query_runner.is_running():
-            QMessageBox.information(self, "검색 진행 중", "검색이 끝난 뒤 실행하세요.")
+            QMessageBox.information(self, "Search in progress", "Run it after the search finishes.")
             return
         if not self._backends_ready:
-            self.chat_widget.add_system("임베딩 모델을 로딩하는 중입니다 — 완료 후 다시 시도해 주세요.")
+            self.chat_widget.add_system("The embedding model is loading — please try again when it finishes.")
             return
         root = self.cfg.dataset_root
         if not root or not os.path.isdir(root):
-            QMessageBox.warning(self, "데이터셋 없음", "유효한 데이터셋 루트를 먼저 설정하세요.")
+            QMessageBox.warning(self, "No dataset", "Set a valid dataset root first.")
             self.open_settings()
             return
 
@@ -782,9 +782,9 @@ class MainWindow(QMainWindow):
             counts = self._scan_class_ids(root)
             if counts:
                 ok = QMessageBox.question(
-                    self, "클래스 이름 입력",
-                    f"YOLO 라벨에서 클래스 {len(counts)}종이 발견되었습니다.\n"
-                    "캡션/요약에 사용할 이름을 지금 입력할까요?",
+                    self, "Enter class names",
+                    f"Found {len(counts)} classes in the YOLO labels.\n"
+                    "Enter names to use in captions/summaries now?",
                 )
                 if ok == QMessageBox.Yes:
                     names_changed = self._prompt_class_names(counts)
@@ -818,18 +818,18 @@ class MainWindow(QMainWindow):
         self.cancel_btn.clicked.connect(worker.cancel, Qt.DirectConnection)
         self._index_runner = ThreadRunner(worker, self)
         self._index_runner.start()
-        self.chat_widget.add_system("캡션 갱신을 시작합니다…" if refresh else "인덱싱을 시작합니다…")
+        self.chat_widget.add_system("Starting caption refresh…" if refresh else "Starting indexing…")
 
     def _on_index_progress(self, p) -> None:
         """색인 진행 시그널 처리 — 단계(scan/index/caption)에 맞춰 진행 막대와 상태 문구를 갱신."""
         if p.phase == "scan":
             self.progress.setRange(0, 0)  # 스캔 단계는 총량 미정 → 불확정 막대
-            self.status_msg.setText(f"스캔 중… {p.current} 폴더 발견")
+            self.status_msg.setText(f"Scanning… {p.current} folders found")
         elif p.phase in ("index", "caption"):
             if p.total:
                 self.progress.setRange(0, p.total)
                 self.progress.setValue(p.current)
-            verb = "캡션 갱신" if p.phase == "caption" else "인덱싱"
+            verb = "Caption refresh" if p.phase == "caption" else "Indexing"
             self.status_msg.setText(f"{verb} {p.current}/{p.total} — {os.path.basename(p.folder)}")
 
     def _finish_index_ui(self) -> None:
@@ -869,32 +869,32 @@ class MainWindow(QMainWindow):
             # refresh 모드: 워커가 갱신한 레코드 수(int)를 돌려준다.
             n = int(result)
             if n > 0:
-                self.chat_widget.add_system(f"캡션 갱신 완료 — {n}개 레코드에 새 이름이 반영되었습니다.")
+                self.chat_widget.add_system(f"Caption refresh complete — new names applied to {n} records.")
             else:
                 self.chat_widget.add_system(
-                    "갱신된 레코드가 없습니다 — 인덱스와 색인 단위가 일치하는지 확인하거나 전체 재빌드를 실행하세요."
+                    "No records were refreshed — check the index granularity matches, or run a full rebuild."
                 )
             self._ensure_graph_async(force=True)  # 이름이 바뀌었으니 그래프 재빌드
             return
 
         report = result  # build 모드: 워커가 BuildReport를 돌려준다
         if report.cancelled:
-            msg = f"인덱싱이 취소되었습니다 — 현재 {self.store.count()}개 레코드가 저장되어 있습니다."
+            msg = f"Indexing was cancelled — {self.store.count()} records are currently stored."
         else:
-            msg = f"인덱싱 완료 — 총 {self.store.count()}개 {self._unit_label()}가 색인되었습니다."
+            msg = f"Indexing complete — {self.store.count()} {self._unit_label()}s indexed in total."
         if report.pruned:
-            msg += f" (삭제된 파일 레코드 {report.pruned}개 정리)"
+            msg += f" (pruned {report.pruned} deleted-file records)"
         self.chat_widget.add_system(msg)
         # 취소된 빌드는 메타를 신뢰할 수 없으므로 기록/그래프 재빌드를 건너뛴다.
         if not report.cancelled:
             self._write_index_meta(report)
             self._ensure_graph_async(force=True)
         if report.skipped:
-            self.chat_widget.add_system(f"{len(report.skipped)}개 항목은 오류로 건너뛰었습니다 (자세한 내용 표시됨).")
+            self.chat_widget.add_system(f"{len(report.skipped)} items were skipped due to errors (details shown).")
             box = QMessageBox(
-                QMessageBox.Warning, "일부 항목 건너뜀",
-                f"{len(report.skipped)}개 항목이 오류로 색인되지 않았습니다.\n"
-                "자세히 보기에서 전체 목록을 확인할 수 있습니다.",
+                QMessageBox.Warning, "Some items skipped",
+                f"{len(report.skipped)} items were not indexed due to errors.\n"
+                "See the full list under Details.",
                 QMessageBox.Ok, self,
             )
             # 목록이 너무 길어 대화상자가 비대해지지 않도록 앞 500개로 잘라서 보여 준다.
@@ -903,14 +903,14 @@ class MainWindow(QMainWindow):
         # _start_index에서 예약해 둔 후속 캡션 갱신 — 한 번만 돌도록 플래그를 먼저 끈다.
         if self._refresh_after_build:
             self._refresh_after_build = False
-            self.chat_widget.add_system("기존 레코드의 캡션에 새 클래스 이름을 반영합니다…")
+            self.chat_widget.add_system("Applying the new class names to existing record captions…")
             self._start_index(full_rebuild=False, refresh=True)
 
     def _on_index_error(self, msg: str) -> None:
         """색인 오류 콜백 — UI를 복구하고 치명 오류 대화상자를 띄운다."""
         self._finish_index_ui()
-        QMessageBox.critical(self, "인덱싱 오류", msg)
-        self.status_msg.setText("오류")
+        QMessageBox.critical(self, "Indexing error", msg)
+        self.status_msg.setText("Error")
 
     # ---------------------------------------------------------------- 뷰어 / 폴더
     def open_viewer(self, hit) -> None:
@@ -935,8 +935,8 @@ class MainWindow(QMainWindow):
                 if h is None:
                     return ""
                 rank = paths.index(p) + 1 if p in by_path else 0
-                return f"결과 {rank}/{len(paths)} · 점수 {h.score:.2f} · {h.caption}" if h.caption \
-                    else f"결과 {rank}/{len(paths)} · 점수 {h.score:.2f}"
+                return f"Result {rank}/{len(paths)} · score {h.score:.2f} · {h.caption}" if h.caption \
+                    else f"Result {rank}/{len(paths)} · score {h.score:.2f}"
 
             ImageViewer(
                 paths, start, self, class_names=self.cfg.class_names, meta_provider=meta
@@ -981,13 +981,13 @@ class MainWindow(QMainWindow):
         """
         # 진행 중인 백그라운드 작업이 있으면 설정 변경을 막는다(객체가 교체되면 작업이 깨질 수 있음).
         if self._index_runner is not None and self._index_runner.is_running():
-            QMessageBox.information(self, "인덱싱 진행 중", "인덱싱이 끝난 뒤 설정을 변경하세요.")
+            QMessageBox.information(self, "Indexing in progress", "Change settings after indexing finishes.")
             return
         if self._query_runner is not None and self._query_runner.is_running():
-            QMessageBox.information(self, "검색 진행 중", "검색이 끝난 뒤 설정을 변경하세요.")
+            QMessageBox.information(self, "Search in progress", "Change settings after the search finishes.")
             return
         if self._graph_runner is not None and self._graph_runner.is_running():
-            QMessageBox.information(self, "그래프 빌드 중", "객체 그래프 빌드가 끝난 뒤 설정을 변경하세요.")
+            QMessageBox.information(self, "Building graph", "Change settings after the object-graph build finishes.")
             return
         # 변경 전 서명을 찍어 두고, 다이얼로그 종료 후 무엇이 바뀌었는지 비교한다.
         before_index = _index_signature(self.cfg)
@@ -1023,9 +1023,9 @@ class MainWindow(QMainWindow):
         # 색인 서명이 바뀌었고 기존 인덱스가 있으면 호환되지 않으므로 전체 재빌드를 제안.
         if _index_signature(self.cfg) != before_index and self.store.count() > 0:
             ok = QMessageBox.question(
-                self, "색인 설정 변경",
-                "임베딩 모델/차원 또는 색인 단위가 변경되었습니다. 기존 인덱스와 호환되지 않습니다.\n"
-                "지금 전체 재빌드를 실행할까요?",
+                self, "Index settings changed",
+                "The embedding model/dimension or index granularity changed and is incompatible "
+                "with the existing index.\nRun a full rebuild now?",
             )
             if ok == QMessageBox.Yes:
                 self._start_index(full_rebuild=True)
@@ -1033,9 +1033,9 @@ class MainWindow(QMainWindow):
     def make_sample(self) -> None:
         """툴바 '샘플 데이터셋 생성' — 예시 데이터를 만들어 데이터셋 루트로 지정하고 빌드를 제안."""
         if self._index_runner is not None and self._index_runner.is_running():
-            QMessageBox.information(self, "인덱싱 진행 중", "인덱싱이 끝난 뒤 실행하세요.")
+            QMessageBox.information(self, "Indexing in progress", "Run it after indexing finishes.")
             return
-        target = QFileDialog.getExistingDirectory(self, "샘플 데이터셋을 생성할 폴더 선택")
+        target = QFileDialog.getExistingDirectory(self, "Choose a folder to generate the sample dataset in")
         if not target:
             return  # 폴더 선택 취소
         # 지연 임포트: 샘플 생성 경로에서만 필요한 무거운 의존성을 시작 시점에 끌어오지 않는다.
@@ -1049,8 +1049,8 @@ class MainWindow(QMainWindow):
         self.cfg.dataset_root = str(ds)  # 생성된 샘플을 곧바로 데이터셋 루트로 설정
         self.cfg.save(self.paths.config_file)
         self._refresh_status()
-        self.chat_widget.add_system(f"샘플 데이터셋을 생성했습니다: {ds}")
-        if QMessageBox.question(self, "인덱스 빌드", "지금 인덱스를 빌드할까요?") == QMessageBox.Yes:
+        self.chat_widget.add_system(f"Generated sample dataset: {ds}")
+        if QMessageBox.question(self, "Build index", "Build the index now?") == QMessageBox.Yes:
             self._start_index(full_rebuild=True)
 
     # ---------------------------------------------------------------- 수명 주기

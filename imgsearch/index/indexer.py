@@ -204,7 +204,7 @@ class Indexer:
 
         if full_rebuild:
             # 전체 재빌드 요청 시 기존 컬렉션을 완전히 비우고 처음부터 다시 채운다.
-            log_cb("기존 인덱스를 초기화합니다…")
+            log_cb("Clearing the existing index…")
             self.store.clear()
 
         # --- 스캔 단계: 디스크를 훑어 작업 대상 폴더 목록을 먼저 확정한다 ---
@@ -229,7 +229,7 @@ class Indexer:
             units = list(folders)
         total = len(units)
         report = BuildReport(total=total)
-        log_cb(f"{len(folders)}개 폴더 / {total}개 {'이미지' if granularity == 'image' else '폴더'} 발견.")
+        log_cb(f"Found {len(folders)} folders / {total} {'images' if granularity == 'image' else 'folders'}.")
 
         # 기존 컬렉션이 다른 임베더/차원/입자도로 만들어졌다면 호환되지 않으므로 전체 재빌드로 전환.
         if not full_rebuild:
@@ -240,7 +240,7 @@ class Indexer:
                 # sig[2] 가 None 인 경우는 입자도 기록 기능 이전에 만들어진 구버전 인덱스다(불일치로 보지 않음).
                 gran_mismatch = sig[2] is not None and sig[2] != granularity
                 if base_mismatch or gran_mismatch:
-                    log_cb(f"색인 설정 변경 감지 {sig} → {cur + (granularity,)}. 전체 재빌드로 전환합니다.")
+                    log_cb(f"Index settings changed {sig} → {cur + (granularity,)}. Switching to a full rebuild.")
                     self.store.clear()
                     full_rebuild = True
 
@@ -262,7 +262,7 @@ class Indexer:
                 for rid in stale:
                     existing.pop(rid, None)  # 아래 증분 비교에서도 빠지도록 맵에서 제거.
                 report.pruned = len(stale)
-                log_cb(f"디스크에서 사라진 레코드 {len(stale)}개를 정리했습니다.")
+                log_cb(f"Pruned {len(stale)} records whose files no longer exist on disk.")
 
         # 스토어에 일괄 기록(upsert)하기 전 누적 버퍼들(병렬 리스트: 같은 인덱스가 한 레코드).
         ids: list[str] = []
@@ -286,7 +286,7 @@ class Indexer:
         def skip(path: str, err: str) -> None:
             """한 항목 처리 실패를 리포트에 기록하고 로그로 알린다(파이프라인은 계속 진행)."""
             report.skipped.append((path, err))
-            log_cb(f"건너뜀 (오류) {os.path.basename(path)}: {err}")
+            log_cb(f"Skipped (error) {os.path.basename(path)}: {err}")
 
         # 이미지 입자도에서는 임베딩 호출을 배치로 묶는다(배치당 GPU forward 1회).
         # pending 의 각 행은 "벡터를 제외한 모든 정보"를 담아 두고, 벡터만 나중에 일괄 계산한다.
@@ -342,7 +342,7 @@ class Indexer:
                 flush()  # 이미 임베딩이 끝나 버퍼에 들어간 것만 저장하고 종료.
                 report.cancelled = True
                 progress_cb(IndexProgress(i, total, "cancelled", ""))
-                log_cb(f"취소됨 — {report.n_written}개 저장 완료.")
+                log_cb(f"Cancelled — {report.n_written} records saved.")
                 return report
 
             # 입자도에 따라 작업 단위를 풀어 레코드 id/변경키/표시 라벨을 준비한다.
@@ -394,7 +394,7 @@ class Indexer:
         embed_pending()
         flush()
         progress_cb(IndexProgress(total, total, "done", ""))
-        log_cb(f"인덱싱 완료 — 총 {self.store.count()}개 레코드가 색인되었습니다.")
+        log_cb(f"Indexing complete — {self.store.count()} records indexed in total.")
         return report
 
     # ------------------------------------------------------------------ refresh
@@ -413,7 +413,7 @@ class Indexer:
         이미지 단위 인덱스에서만 지원한다.
         """
         if self.cfg.index_granularity != "image":
-            raise ValueError("캡션 새로고침은 이미지 단위(image) 인덱스에서만 지원됩니다")
+            raise ValueError("Caption refresh is only supported for image-granularity indexes")
         if not root or not os.path.isdir(root):
             raise FileNotFoundError(f"Dataset root not found: {root!r}")
         # 저장된 mtime 키를 "그대로 유지"한다: 임베딩은 빌드 시점의 파일을 반영하므로,
@@ -423,7 +423,7 @@ class Indexer:
         prev_mtimes = self.store.existing_mtimes()
         existing = set(prev_mtimes)
         if not existing:
-            log_cb("인덱스가 비어 있어 갱신할 항목이 없습니다.")
+            log_cb("Index is empty — nothing to refresh.")
             return 0
         # 저장된 임베딩 시그니처를 보존한다 — 이번 실행의 임베더가 가벼운 mock 일 수 있으므로,
         # model_id/embed_dim/granularity 를 그 mock 값으로 덮어써 인덱스를 오염시키면 안 된다.
@@ -456,7 +456,7 @@ class Indexer:
             if should_cancel():
                 flush()  # 메타 갱신은 임베딩과 무관하므로, 모은 것만 안전하게 반영하고 종료.
                 progress_cb(IndexProgress(i, total, "cancelled", ""))
-                log_cb(f"취소됨 — {n_updated}개 갱신 완료.")
+                log_cb(f"Cancelled — {n_updated} records refreshed.")
                 return n_updated
             rid = image_id(image_path)
             # 인덱스에 이미 있는 레코드만 대상으로 한다(여기서 새 레코드를 추가하지는 않음).
@@ -464,7 +464,7 @@ class Indexer:
                 try:
                     caption = self._label_caption(image_path)  # 모델을 절대 호출하지 않음
                 except Exception as e:
-                    log_cb(f"건너뜀 (오류) {os.path.basename(image_path)}: {e}")
+                    log_cb(f"Skipped (error) {os.path.basename(image_path)}: {e}")
                     progress_cb(IndexProgress(i + 1, total, "caption", ""))
                     continue
                 if not caption:
@@ -491,5 +491,5 @@ class Indexer:
 
         flush()
         progress_cb(IndexProgress(total, total, "done", ""))
-        log_cb(f"캡션 갱신 완료 — {n_updated}개 레코드에 새 클래스 이름이 반영되었습니다.")
+        log_cb(f"Caption refresh complete — new class names applied to {n_updated} records.")
         return n_updated

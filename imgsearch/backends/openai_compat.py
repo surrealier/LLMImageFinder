@@ -82,7 +82,7 @@ class OpenAICompatVLMCaptioner(_OpenAICompatBase):
         user_text = prompts.CAPTION_USER
         if context:
             # 사이드카 메모가 있으면 프롬프트에 덧붙이되, 너무 길어지지 않도록 300자로 제한.
-            user_text += f"\n참고 메모: {context[:300]}"
+            user_text += f"\nReference note: {context[:300]}"
         messages = [
             {"role": "system", "content": prompts.CAPTION_SYSTEM},
             {
@@ -155,7 +155,7 @@ class OpenAICompatChatLLM(_OpenAICompatBase):
     def summarize(self, query: str, hits: list[FolderHit]) -> str:
         """검색된 폴더 설명을 근거(context)로 LLM에 요약을 요청한다. 실패 시 상위 폴더명 나열로 폴백."""
         if not hits:
-            return f"'{query}'에 해당하는 이미지를 찾지 못했습니다."
+            return f"No images matched '{query}'."
         # 상위 8개 폴더의 (폴더명: 캡션)을 근거로 제공. 캡션이 없으면 "(설명 없음)"으로 표기.
         ctx = "\n".join(
             f"- {Path(h.folder).name}: {h.caption or '(설명 없음)'}" for h in hits[:8]
@@ -171,4 +171,4 @@ class OpenAICompatChatLLM(_OpenAICompatBase):
             log.warning("summarize failed: %s", e)
             # LLM이 죽어도 사용자에게는 최소한의 결과(상위 3개 폴더명)를 보여준다.
             tops = ", ".join(Path(h.folder).name for h in hits[:3])
-            return f"'{query}' 관련 상위 {len(hits)}개 폴더: {tops}."
+            return f"Top {len(hits)} folders for '{query}': {tops}."

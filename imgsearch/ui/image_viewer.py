@@ -77,7 +77,7 @@ class ImageViewer(QDialog):
         # 현재 그려둔 라벨 박스 그래픽 아이템들(이미지를 바꿀 때 지우기 위해 추적).
         self._box_items: list = []
 
-        self.setWindowTitle("이미지 보기")
+        self.setWindowTitle("View image")
         self.resize(960, 720)
         self.setStyleSheet("QDialog{background:#0f141c;}")
 
@@ -115,20 +115,20 @@ class ImageViewer(QDialog):
         # 하단 도구 모음(이전/다음/라벨/확대/축소/맞춤/폴더 열기).
         bar = QHBoxLayout()
         self.prev_btn = QPushButton(icons.prev(), "")
-        self.prev_btn.setToolTip("이전 (←)")
+        self.prev_btn.setToolTip("Previous (←)")
         self.prev_btn.clicked.connect(self.prev)
         bar.addWidget(self.prev_btn)
 
         self.next_btn = QPushButton(icons.nxt(), "")
-        self.next_btn.setToolTip("다음 (→)")
+        self.next_btn.setToolTip("Next (→)")
         self.next_btn.clicked.connect(self.next)
         bar.addWidget(self.next_btn)
 
         # 라벨 박스 표시 토글 버튼. 누름 상태는 클래스 변수 show_boxes로 세션 간 공유된다.
-        self.boxes_btn = QPushButton(icons.tags(), " 라벨")
+        self.boxes_btn = QPushButton(icons.tags(), " Labels")
         self.boxes_btn.setCheckable(True)
         self.boxes_btn.setChecked(ImageViewer.show_boxes)
-        self.boxes_btn.setToolTip("YOLO 라벨 박스 표시/숨김 (B)")
+        self.boxes_btn.setToolTip("Show/hide YOLO label boxes (B)")
         self.boxes_btn.toggled.connect(self._on_boxes_toggled)
         bar.addWidget(self.boxes_btn)
 
@@ -140,22 +140,22 @@ class ImageViewer(QDialog):
         bar.addStretch(1)
 
         zin = QPushButton(icons.zoom_in(), "")
-        zin.setToolTip("확대 (+)")
+        zin.setToolTip("Zoom in (+)")
         # 람다로 배율 인자를 넘긴다(1.25배 확대).
         zin.clicked.connect(lambda: self.zoom(1.25))
         bar.addWidget(zin)
         zout = QPushButton(icons.zoom_out(), "")
-        zout.setToolTip("축소 (-)")
+        zout.setToolTip("Zoom out (-)")
         # 0.8배 = 1/1.25, 확대 버튼과 대칭이 되도록 한 단계 축소.
         zout.clicked.connect(lambda: self.zoom(0.8))
         bar.addWidget(zout)
         fit = QPushButton(icons.fit(), "")
-        fit.setToolTip("창에 맞춤 (F)")
+        fit.setToolTip("Fit to window (F)")
         fit.clicked.connect(self.fit)
         bar.addWidget(fit)
 
-        openf = QPushButton(icons.folder(), " 폴더 열기")
-        openf.setToolTip("탐색기에서 이 이미지 위치 열기")
+        openf = QPushButton(icons.folder(), " Open folder")
+        openf.setToolTip("Reveal this image's location in Explorer")
         openf.clicked.connect(self._open_folder)
         bar.addWidget(openf)
         root.addLayout(bar)

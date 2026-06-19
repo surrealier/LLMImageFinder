@@ -69,7 +69,7 @@ class SearchService:
         text = (text or "").strip()
         k = int(k or self.cfg.top_k)  # k 미지정 시 설정의 기본 top_k 사용
         if not text:
-            return QueryResult(text, "", [], "검색어를 입력하세요.")
+            return QueryResult(text, "", [], "Enter a search query.")
 
         refined = self._refine(text)  # LLM이 있으면 질의를 확장/정제
         mode = (self.cfg.search_mode or "vector").lower()
@@ -98,16 +98,16 @@ class SearchService:
             # 저장된 벡터가 사라진 경우(예: 재빌드 없이 granularity만 바뀜).
             # 여기서 즉석 임베딩을 만들지 '않는다' — 이 메서드는 GUI 스레드에서 돌 수 있어
             # 무거운 모델 호출로 UI를 멈추면 안 되기 때문. 대신 빈 결과 + 안내를 돌려준다.
-            return QueryResult(query=f"유사 이미지: {os.path.basename(hit.image_path or hit.folder)}",
+            return QueryResult(query=f"Similar: {os.path.basename(hit.image_path or hit.folder)}",
                                refined="", hits=[],
-                               summary="저장된 임베딩을 찾지 못했습니다 — 전체 재빌드 후 다시 시도하세요.")
+                               summary="No stored embedding found — rebuild the index and try again.")
         # 자기 자신이 1순위로 잡히므로 k+1개를 받아 자신을 제외하고 k개로 자른다.
         hits = self.store.query(vec, k + 1)
         hits = [h for h in hits if h.image_path != hit.image_path][:k]
         for h in hits:
             h.match = "vector"  # 출처는 전부 벡터 검색
         label = os.path.basename(hit.image_path or hit.folder)
-        return QueryResult(query=f"유사 이미지: {label}", refined="", hits=hits, summary="")
+        return QueryResult(query=f"Similar: {label}", refined="", hits=hits, summary="")
 
     def search(self, text: str, k: Optional[int] = None, mode: Optional[str] = None,
                refine: bool = True) -> list[FolderHit]:

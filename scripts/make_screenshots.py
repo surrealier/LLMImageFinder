@@ -34,7 +34,7 @@ def _wait_query(app, win, ms=8000):
         app.processEvents(QEventLoop.AllEvents, 30)
 
 
-_CLASSES = {"0": "사람", "1": "오토바이", "2": "자동차", "3": "신호등"}
+_CLASSES = {"0": "person", "1": "motorcycle", "2": "car", "3": "traffic light"}
 _COLORS = [(229, 115, 115), (100, 181, 246), (129, 199, 132), (255, 213, 79)]
 
 
@@ -103,7 +103,7 @@ def main() -> None:
     win.show()
     win.indexer.build(str(ds1), full_rebuild=True)
     win._refresh_status()
-    win.chat_widget.input.setText("불과 연기가 있는 이미지")
+    win.chat_widget.input.setText("fire and smoke")
     win.chat_widget._on_send()
     _wait_query(app, win)
     _pump(app, 1500)  # let thumbnails decode
@@ -134,7 +134,7 @@ def main() -> None:
     win2.graph.build(build_records(root2, cfg2))
 
     # agentic query -> chat shows the A2A trace, gallery shows provenance badges
-    win2.chat_widget.input.setText("사람과 오토바이가 함께 있는 이미지")
+    win2.chat_widget.input.setText("a person and a motorcycle together")
     win2.chat_widget._on_send()
     _wait_query(app, win2)
     _pump(app, 1500)
@@ -161,7 +161,7 @@ def main() -> None:
         os.path.join(ds2, f) for f in os.listdir(ds2) if f.endswith(".jpg")
     )
     v = ImageViewer(imgs, 2, win2, class_names=_CLASSES,
-                    meta_provider=lambda p: f"결과 3/12 · 점수 0.41 · 탐지 객체: 사람, 오토바이, 자동차")
+                    meta_provider=lambda p: "Result 3/12 · score 0.41 · Objects: person, motorcycle, car")
     v.resize(820, 660)
     v.show()
     _pump(app, 500)

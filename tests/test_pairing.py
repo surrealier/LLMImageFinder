@@ -9,7 +9,7 @@ def _first_folder(sample_ds):
 def test_sidecar_for(sample_ds):
     _d, imgs = _first_folder(sample_ds)
     txt = pairing.sidecar_for(imgs[0])
-    assert txt and "프레임" in txt
+    assert txt and "frame" in txt
 
 
 def test_folder_sidecar_text(sample_ds):

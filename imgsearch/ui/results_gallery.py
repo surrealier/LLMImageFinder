@@ -93,9 +93,9 @@ class ResultsGallery(QListView):
             item.setData(str(getattr(hit, "match", "") or ""), MATCH_ROLE)
             item.setData(hit, HIT_ROLE)
             item.setToolTip(
-                f"{hit.caption}\n{hit.image_path}\n점수: {hit.score:.3f}"
+                f"{hit.caption}\n{hit.image_path}\nScore: {hit.score:.3f}"
                 if hit.caption
-                else f"{hit.image_path}\n점수: {hit.score:.3f}"
+                else f"{hit.image_path}\nScore: {hit.score:.3f}"
             )
             self._model.appendRow(item)
             if hit.image_path:
@@ -168,18 +168,18 @@ class ResultsGallery(QListView):
             return
         self.setCurrentIndex(index)
         menu = QMenu(self)
-        menu.addAction(icons.eye(), "이미지 보기 (Enter)", lambda: self.activated_hit.emit(hit))
+        menu.addAction(icons.eye(), "View image (Enter)", lambda: self.activated_hit.emit(hit))
         menu.addAction(
-            icons.similar(), "비슷한 이미지 검색", lambda: self.similar_requested.emit(hit)
+            icons.similar(), "Find similar images", lambda: self.similar_requested.emit(hit)
         )
         menu.addSeparator()
         clip = QGuiApplication.clipboard()
-        menu.addAction(icons.copy(), "이미지 경로 복사 (Ctrl+C)", lambda: clip.setText(hit.image_path))
-        menu.addAction(icons.copy(), "폴더 경로 복사", lambda: clip.setText(hit.folder))
+        menu.addAction(icons.copy(), "Copy path (Ctrl+C)", lambda: clip.setText(hit.image_path))
+        menu.addAction(icons.copy(), "Copy folder path", lambda: clip.setText(hit.folder))
         if hit.caption:
-            menu.addAction(icons.copy(), "캡션 복사", lambda: clip.setText(hit.caption))
+            menu.addAction(icons.copy(), "Copy caption", lambda: clip.setText(hit.caption))
         menu.addSeparator()
         menu.addAction(
-            icons.folder(), "탐색기에서 열기 (Ctrl+E)", lambda: reveal_in_explorer(hit.image_path)
+            icons.folder(), "Reveal in Explorer (Ctrl+E)", lambda: reveal_in_explorer(hit.image_path)
         )
         menu.exec(event.globalPos())

@@ -59,22 +59,22 @@ class ChatWidget(QWidget):
 
         row = QHBoxLayout()
         self.input = QLineEdit()
-        self.input.setPlaceholderText("찾고 싶은 이미지를 설명하세요 — ↑/↓ 로 이전 검색어")
+        self.input.setPlaceholderText("Describe the image you want to find — ↑/↓ for previous searches")
         self.input.returnPressed.connect(self._on_send)  # Enter로 제출
         # ↑/↓ 키를 가로채 히스토리를 탐색하기 위해 이벤트 필터를 설치(아래 eventFilter 참고).
         self.input.installEventFilter(self)
         row.addWidget(self.input, 1)
 
         self.send_btn = QPushButton(icons.send(), "")
-        self.send_btn.setToolTip("검색 (Enter)")
+        self.send_btn.setToolTip("Search (Enter)")
         self.send_btn.setFixedWidth(42)
         self.send_btn.clicked.connect(self._on_send)
         row.addWidget(self.send_btn)
         root.addLayout(row)
 
         self.add_system(
-            "안녕하세요! 데이터셋에서 찾고 싶은 장면을 자연어로 설명해 주세요. "
-            "↑/↓ 키로 이전 검색어를 다시 불러올 수 있습니다."
+            "Hello! Describe the scene you want to find in the dataset in natural language. "
+            "Use the ↑/↓ keys to recall previous searches."
         )
 
     # --- 히스토리 ---
@@ -168,7 +168,7 @@ class ChatWidget(QWidget):
     def add_user(self, text: str) -> None:
         """사용자 발화를 '나 ▸' 스타일로 추가한다. html.escape로 특수문자 주입을 막는다."""
         self._append(
-            f'<div style="margin:6px 0;"><span style="color:#7dd3fc;font-weight:600;">나 ▸ </span>'
+            f'<div style="margin:6px 0;"><span style="color:#7dd3fc;font-weight:600;">You ▸ </span>'
             f'<span style="color:#e5e7eb;">{html.escape(text)}</span></div>'
         )
 

@@ -37,7 +37,7 @@ class GraphDialog(QDialog):
         """그래프 저장소를 받아 클래스 목록과 통계로 다이얼로그를 채운다."""
         super().__init__(parent)
         self.graph = graph
-        self.setWindowTitle("객체 그래프")
+        self.setWindowTitle("Object graph")
         self.resize(720, 520)
 
         root = QVBoxLayout(self)
@@ -54,8 +54,8 @@ class GraphDialog(QDialog):
         except Exception:
             total = 0
         head = QLabel(
-            f"라벨이 있는 이미지 {total}개 · 객체 클래스 {len(counts)}종 — "
-            "왼쪽에서 객체를 선택하면 함께 나타나는 객체를 보여줍니다."
+            f"{total} labeled images · {len(counts)} object classes — "
+            "select an object on the left to see objects that appear with it."
         )
         head.setWordWrap(True)
         head.setStyleSheet("color:#cbd5e1;")
@@ -67,11 +67,11 @@ class GraphDialog(QDialog):
 
         # --- 왼쪽: 체크 가능한 객체 클래스 목록 ---
         left = QVBoxLayout()
-        left.addWidget(QLabel("객체 (체크 = AND 필터)"))
+        left.addWidget(QLabel("Objects (checked = AND filter)"))
         self.class_list = QListWidget()
         # 이미지 수 내림차순(-kv[1]), 동수일 땐 이름 오름차순(kv[0])으로 정렬해 많이 쓰인 객체를 위로.
         for name, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
-            it = QListWidgetItem(f"{name}  ·  {n}장")
+            it = QListWidgetItem(f"{name}  ·  {n} images")
             # 표시 문구에는 개수를 붙이지만, 실제 클래스 이름은 UserRole 데이터로 따로 보관한다.
             it.setData(Qt.UserRole, name)
             # 체크박스를 켤 수 있게 플래그를 추가하고 기본은 해제 상태로 둔다.
@@ -85,10 +85,10 @@ class GraphDialog(QDialog):
 
         # --- 오른쪽: 선택한 클래스와 함께 나타나는 객체 표 ---
         right = QVBoxLayout()
-        self.co_title = QLabel("동시 출현 객체")
+        self.co_title = QLabel("Co-occurring objects")
         right.addWidget(self.co_title)
         self.co_table = QTableWidget(0, 2)
-        self.co_table.setHorizontalHeaderLabels(["객체", "동시 출현"])
+        self.co_table.setHorizontalHeaderLabels(["Object", "Co-occurrence"])
         self.co_table.horizontalHeader().setStretchLastSection(True)
         self.co_table.verticalHeader().setVisible(False)
         # 표는 읽기 전용(조회 결과를 보여주기만 한다).
@@ -101,10 +101,10 @@ class GraphDialog(QDialog):
         self.sel_label = QLabel("")
         self.sel_label.setStyleSheet("color:#94a3b8;")
         bottom.addWidget(self.sel_label, 1)
-        self.and_btn = QPushButton("선택한 객체를 모두 포함한 이미지 보기")
+        self.and_btn = QPushButton("View images containing all selected objects")
         self.and_btn.clicked.connect(self._emit_and_filter)
         bottom.addWidget(self.and_btn)
-        close = QPushButton("닫기")
+        close = QPushButton("Close")
         close.clicked.connect(self.reject)
         bottom.addWidget(close)
         root.addLayout(bottom)
@@ -122,7 +122,7 @@ class GraphDialog(QDialog):
             return
         # 표시 문구가 아닌 UserRole에 저장한 실제 클래스 이름으로 조회한다.
         name = current.data(Qt.UserRole)
-        self.co_title.setText(f"‘{name}’와(과) 함께 나타나는 객체")
+        self.co_title.setText(f"Objects appearing with ‘{name}’")
         try:
             # 상위 50개까지만 가져온다(목록이 너무 길어지지 않게).
             rows = self.graph.cooccurring(name, top=50)
@@ -147,7 +147,7 @@ class GraphDialog(QDialog):
     def _refresh_selection(self) -> None:
         """선택 요약 라벨을 갱신하고, 하나 이상 체크됐을 때만 AND 버튼을 활성화한다."""
         sel = self._checked_classes()
-        self.sel_label.setText("선택: " + (", ".join(sel) if sel else "(없음)"))
+        self.sel_label.setText("Selected: " + (", ".join(sel) if sel else "(none)"))
         self.and_btn.setEnabled(bool(sel))
 
     def _emit_and_filter(self) -> None:

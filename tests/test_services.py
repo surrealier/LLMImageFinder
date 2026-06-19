@@ -86,7 +86,7 @@ def test_empty_query_never_embeds(tmp_path):
     svc = SearchService(_MustNotEmbed(), store, None, cfg)
     res = svc.query("   ")
     assert res.hits == []
-    assert "검색어" in res.summary
+    assert "search query" in res.summary
 
 
 def test_summarize_disabled_never_called(tmp_path):
@@ -109,7 +109,7 @@ def test_query_by_example_reuses_stored_embedding(tmp_path):
     assert res.hits
     assert len(res.hits) <= 3
     assert all(h.image_path != example.image_path for h in res.hits)  # self excluded
-    assert "유사 이미지" in res.query
+    assert "Similar" in res.query
 
 
 def test_query_by_example_missing_embedding_never_embeds(tmp_path):
@@ -122,7 +122,7 @@ def test_query_by_example_missing_embedding_never_embeds(tmp_path):
     ghost = FolderHit(folder="/nope", image_path="/nope/missing.jpg", caption="", score=0.0)
     res = svc.query_by_example(ghost, k=5)
     assert res.hits == []
-    assert "임베딩" in res.summary  # explanatory, no crash, no embed
+    assert "embedding" in res.summary  # explanatory, no crash, no embed
 
 
 def test_query_by_example_folder_granularity(tmp_path, sample_ds):

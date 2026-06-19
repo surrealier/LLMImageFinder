@@ -23,13 +23,13 @@ def test_strip_one_josa_keeps_noun_via_both_forms():
 
 def test_concept_hints():
     hints = koutil.concept_hints("fire and smoke in a building")
-    assert "불/화재" in hints and "연기" in hints
+    assert "fire" in hints and "smoke" in hints
 
 
 def test_mock_refine_and_summary():
     chat = MockChatLLM()
-    r = chat.refine_query("불과 연기가 있는 이미지")
+    r = chat.refine_query("불과 연기가 있는 이미지")  # KO query still expands via KO2EN
     assert "fire" in r and "smoke" in r
-    assert "찾지 못" in chat.summarize("질의", [])
-    s = chat.summarize("질의", [FolderHit("a/b/fire_smoke", "x.jpg", "캡션", 0.9, 3)])
+    assert "No images matched" in chat.summarize("query", [])
+    s = chat.summarize("query", [FolderHit("a/b/fire_smoke", "x.jpg", "caption", 0.9, 3)])
     assert "fire_smoke" in s

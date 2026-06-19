@@ -34,7 +34,7 @@ def build_graph_store(cfg: AppConfig, graph_dir: str | Path) -> GraphStore:
         except Exception as e:  # extra 미설치, 네이티브 로드 오류, DB 잠김 등
             # 어떤 이유로든 kuzu가 안 되면 경고만 남기고 메모리로 떨어진다(기능 자체는 유지).
             log.warning("kuzu unavailable, using in-memory graph: %s", e)
-            # 사용자에게 보이는 "성능 저하(degraded)" 상태로 표시 — UI 문구라 한글 그대로 유지.
-            cfg.mark_degraded(f"GraphDB(kuzu) 사용 불가 — 메모리 그래프로 대체: {e}")
+            # 사용자에게 보이는 "성능 저하(degraded)" 상태로 표시.
+            cfg.mark_degraded(f"GraphDB (kuzu) unavailable — falling back to the in-memory graph: {e}")
     # kuzu가 아니거나 위에서 대체로 떨어진 경우의 기본 백엔드.
     return MemoryGraphStore()

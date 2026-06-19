@@ -83,7 +83,7 @@ class IndexInfoDialog(QDialog):
         - chroma_dir: 벡터 저장소(ChromaDB) 디렉터리(용량 계산/표시용).
         """
         super().__init__(parent)
-        self.setWindowTitle("인덱스 정보")
+        self.setWindowTitle("Index info")
         self.setMinimumWidth(520)
         # 재빌드 요청 여부. 호출자가 다이얼로그가 닫힌 뒤 이 값을 확인한다.
         self.rebuild_clicked = False
@@ -103,39 +103,39 @@ class IndexInfoDialog(QDialog):
             lab.setWordWrap(True)
             form.addRow(label, lab)
 
-        row("색인된 레코드", f"{count}개")
+        row("Indexed records", f"{count}")
         # 인덱스가 있을 때만 시그니처(모델/차원/단위)를 표시한다.
         if signature:
             model_id, dim, gran = signature
             # 내부 키("image"/"folder")를 사람이 읽을 한글로 바꾼다(없으면 원문/기록 없음).
-            gran_txt = {"image": "이미지별", "folder": "폴더별"}.get(gran or "", gran or "기록 없음")
-            row("임베딩 모델", f"{model_id} ({dim}차원)")
-            row("색인 단위", gran_txt)
+            gran_txt = {"image": "Per image", "folder": "Per folder"}.get(gran or "", gran or "No record")
+            row("Embedding model", f"{model_id} ({dim} dimensions)")
+            row("Index unit", gran_txt)
         built_root = str(meta.get("dataset_root", ""))
         # 메타가 있으면 마지막 빌드 시각/소요시간/처리량/대상 데이터셋을 보여준다.
         if meta:
-            row("마지막 빌드", str(meta.get("built_at", "—")))
+            row("Last build", str(meta.get("built_at", "—")))
             dur = meta.get("duration_s")
             # 숫자일 때만 '초' 단위로 포맷(누락/문자열인 경우 줄 자체를 생략).
             if isinstance(dur, (int, float)):
-                row("소요 시간", f"{dur:.1f}초")
-            row("기록/건너뜀/정리", (
-                f"{meta.get('n_written', '?')}개 기록 · "
-                f"{meta.get('skipped', 0)}건 건너뜀 · {meta.get('pruned', 0)}개 정리"
+                row("Duration", f"{dur:.1f}s")
+            row("Written / skipped / pruned", (
+                f"{meta.get('n_written', '?')} written · "
+                f"{meta.get('skipped', 0)} skipped · {meta.get('pruned', 0)} pruned"
             ))
-            row("빌드 당시 데이터셋", built_root)
+            row("Dataset at build time", built_root)
         # 빌드 당시 경로와 현재 경로가 모두 있고 서로 다르면 '불일치'로 본다.
         # (인덱스가 다른 데이터셋으로 만들어진 상태 → 검색 결과가 엉뚱할 수 있음)
         mismatch = bool(built_root) and bool(current_root) and built_root != current_root
         row(
-            "현재 데이터셋",
-            current_root or "(미설정)",
+            "Current dataset",
+            current_root or "(not set)",
             # 불일치면 빨간색으로 경고 강조.
             color="#ef4444" if mismatch else "",
         )
         if mismatch:
-            row("주의", "인덱스가 다른 데이터셋으로 만들어졌습니다 — 전체 재빌드를 권장합니다.", "#ef4444")
-        row("저장 공간", f"{_dir_size_mb(chroma_dir):.1f} MB ({chroma_dir})")
+            row("Warning", "The index was built from a different dataset — a full rebuild is recommended.", "#ef4444")
+        row("Storage", f"{_dir_size_mb(chroma_dir):.1f} MB ({chroma_dir})")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -143,7 +143,7 @@ class IndexInfoDialog(QDialog):
         # 데이터셋 불일치거나 색인된 레코드가 있을 때만 '전체 재빌드' 버튼을 노출한다
         # (인덱스가 비어 있으면 재빌드할 것도 없으므로 굳이 보여주지 않음).
         if mismatch or count > 0:
-            rebuild_btn = QPushButton("전체 재빌드…")
+            rebuild_btn = QPushButton("Full rebuild…")
             rebuild_btn.clicked.connect(self._on_rebuild)
             buttons.addButton(rebuild_btn, QDialogButtonBox.ActionRole)
         root.addWidget(buttons)

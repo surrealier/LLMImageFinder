@@ -37,13 +37,13 @@ class MockBanner(QFrame):
         self._icon.setPixmap(icons.warn().pixmap(18, 18))
         lay.addWidget(self._icon)
 
-        self._msg = QLabel("MOCK 모드로 실행 중입니다.")
+        self._msg = QLabel("Running in MOCK mode.")
         self._msg.setWordWrap(True)
         # 메시지가 남는 가로 공간을 모두 차지하도록(stretch=1) 늘어나게 한다.
         self._msg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         lay.addWidget(self._msg, 1)
 
-        btn = QPushButton("설정 열기")
+        btn = QPushButton("Open Settings")
         # 버튼 클릭을 그대로 open_settings 신호로 전달(별도 핸들러 없이 emit에 직접 연결).
         btn.clicked.connect(self.open_settings.emit)
         lay.addWidget(btn)
@@ -60,10 +60,10 @@ class MockBanner(QFrame):
         reason이 있으면 괄호로 덧붙여 어떤 백엔드가 왜 실패했는지 알 수 있게 한다.
         """
         base = (
-            "MOCK 모드로 실행 중입니다 — 결정적(deterministic) 검색 결과만 제공됩니다. "
-            "실제 모델을 사용하려면 설정에서 백엔드를 구성하세요."
+            "Running in MOCK mode — only deterministic search results are provided. "
+            "To use real models, configure a backend in Settings."
         )
         if reason:
-            base += f"  (사유: {reason})"
+            base += f"  (reason: {reason})"
         self._msg.setText(base)
         self.setVisible(True)

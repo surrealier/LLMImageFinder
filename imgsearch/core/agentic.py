@@ -75,14 +75,17 @@ def rule_based_plan(query: str, class_names) -> Plan:
     q = query or ""
     required: list[str] = []
     excluded: list[str] = []
-    neg_markers = ("없는", "없이", "제외", "말고", "빼고", "아닌")
+    # 다국어 부정 표현 감지: 한국어는 명사 '뒤'에, 영어는 명사 '앞'에 부정어가 온다.
+    kr_neg = ("없는", "없이", "제외", "말고", "빼고", "아닌")  # Korean: after the noun
+    en_neg = ("without", "no ", "not ", "except", "excluding", "minus")  # English: before the noun
+    ql = q.lower()
     for nm in names:
         if nm and nm in q:
-            # 객체명이 언급된 '바로 뒤 ~6글자'만 살펴 부정 표현이 있는지 확인한다.
-            # (예: "사람 없는" -> '사람'은 제외로 분류) 전체 문장이 아닌 인접 꼬리만
-            # 보는 휴리스틱이라, 같은 객체가 다른 맥락에서 또 쓰여도 영향을 덜 받는다.
-            tail = q[q.find(nm) + len(nm): q.find(nm) + len(nm) + 6]
-            (excluded if any(m in tail for m in neg_markers) else required).append(nm)
+            i = q.find(nm)
+            tail = q[i + len(nm): i + len(nm) + 6]          # 한국어: 객체명 바로 뒤 ~6글자
+            head = ql[max(0, i - 14): i]                    # English: ~14 chars before the mention
+            is_excluded = any(m in tail for m in kr_neg) or any(m in head for m in en_neg)
+            (excluded if is_excluded else required).append(nm)
     # 중복 제거 + 등장 순서 보존(dict.fromkeys는 입력 순서를 유지한다).
     required = list(dict.fromkeys(required))
     # 같은 객체가 필수와 제외에 동시에 잡히면 모순이므로 필수를 우선해 제외에서 뺀다.
@@ -204,26 +207,26 @@ class AgenticSearch:
         query = (query or "").strip()
         k = int(k or self.cfg.top_k)
         if not query:
-            return QueryResult(query, "", [], "검색어를 입력하세요.")
+            return QueryResult(query, "", [], "Enter a search query.")
 
         # 1) 계획 수립 — 의미 텍스트와 필수/제외 객체로 질의를 분해한다.
         plan = self._plan(query)
-        req = ", ".join(plan.required_objects) or "없음"  # 추적 메시지 표시용 문자열
-        exc = ", ".join(plan.excluded_objects) or "없음"
-        step_cb(f"🧭 계획 — 의미: ‘{plan.semantic}’ · 필수 객체: {req} · 제외: {exc}")
+        req = ", ".join(plan.required_objects) or "none"  # 추적 메시지 표시용 문자열
+        exc = ", ".join(plan.excluded_objects) or "none"
+        step_cb(f"🧭 Plan — query: '{plan.semantic}' · required: {req} · excluded: {exc}")
 
         # 2) 하이브리드 검색 — 이후 그래프 필터로 줄어들 것을 감안해 넉넉히(fan) 뽑는다.
         #    refine=False: 이미 plan.semantic이 확장된 텍스트라 재정제 불필요.
         fan = max(k * 3, 30)
         hits = self.service.search(plan.semantic, k=fan, mode="hybrid", refine=False)
-        step_cb(f"🔍 하이브리드 검색 — 후보 {len(hits)}건")
+        step_cb(f"🔍 Hybrid search — {len(hits)} candidates")
 
         # 3) 필수 객체 필터 — '모든' 필수 객체를 포함하는 이미지만 남긴다.
         if plan.required_objects:
             req_ids = self._graph_ids(plan.required_objects, "all")
             if req_ids is None:
                 # 그래프와 색인이 불일치(또는 그래프 미구축) -> 필터를 건너뛴다고 안내.
-                step_cb("🕸 그래프 필터 — 인덱스와 그래프가 일치하지 않아 건너뜁니다 (전체 재빌드 권장)")
+                step_cb("🕸 Graph filter — skipped (graph doesn't match the current index; full rebuild recommended)")
             else:
                 # 후보 중 조건을 만족하는 것만 유지.
                 kept = [h for h in hits if image_id(h.image_path) in req_ids]
@@ -243,7 +246,7 @@ class AgenticSearch:
                         kept.append(h)
                     kept.sort(key=lambda h: h.score, reverse=True)  # 보충분 포함 재정렬
                 hits = kept
-                step_cb(f"🕸 그래프 필터 — 필수[{req}] 모두 포함 → {len(hits)}건")
+                step_cb(f"🕸 Graph filter — all of [{req}] → {len(hits)}")
 
         # 4) 제외 객체 필터 — 제외 객체를 '하나라도' 포함하면 결과에서 뺀다.
         if plan.excluded_objects:
@@ -251,13 +254,13 @@ class AgenticSearch:
             if exc_ids:  # None(건너뜀)이나 빈 집합(제외 대상 없음)이면 아무것도 안 한다
                 before = len(hits)
                 hits = [h for h in hits if image_id(h.image_path) not in exc_ids]
-                step_cb(f"🚫 제외 필터 — 제외[{exc}] → {before - len(hits)}건 제거")
+                step_cb(f"🚫 Exclude filter — removed {before - len(hits)} with [{exc}]")
 
         # 5) 최종 top-k로 자르고 요약을 만든다(요약 비활성/실패 시 빈 문자열).
         hits = hits[:k]
         summary = self.service._summarize(query, hits)
         if summary:
-            step_cb("✍ 요약 완료")
-        step_cb(f"✅ 최종 결과 {len(hits)}건")
+            step_cb("✍ Summary ready")
+        step_cb(f"✅ {len(hits)} final results")
         # refined에는 (원문이 아니라) 실제 검색에 쓴 plan.semantic을 담아 UI에서 확인 가능하게 한다.
         return QueryResult(query=query, refined=plan.semantic, hits=hits, summary=summary)

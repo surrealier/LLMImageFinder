@@ -41,7 +41,7 @@ def build_embedder(cfg: AppConfig) -> Embedder:
             return emb
         except Exception as e:
             # 로드 실패 사유를 config에 남겨 UI 배너로 사용자에게 보여주고, mock으로 강등.
-            cfg.mark_degraded(f"임베딩 모델 로드 실패({cfg.embedder_model}): {e}")
+            cfg.mark_degraded(f"Failed to load embedding model ({cfg.embedder_model}): {e}")
             log.warning("jina-clip unavailable, using mock embedder: %s", e)
     # 폴백: mock도 동일한 embed_dim을 써야 스토어 차원과 어긋나지 않는다.
     return MockEmbedder(dim=cfg.embed_dim)
@@ -66,7 +66,7 @@ def build_captioner(cfg: AppConfig) -> Optional[Captioner]:
             log.info("Captioner: vLLM (%s @ %s)", cfg.vlm_model, cfg.vlm_base_url)
             return cap
         except Exception as e:
-            cfg.mark_degraded(f"VLM 캡션 백엔드 연결 실패: {e}")
+            cfg.mark_degraded(f"Could not connect to the VLM caption backend: {e}")
             log.warning("vLLM captioner unavailable, using mock: %s", e)
     return MockCaptioner()
 
@@ -87,7 +87,7 @@ def build_chat(cfg: AppConfig) -> ChatLLM:
             log.info("Chat: vLLM (%s @ %s)", cfg.chat_model, cfg.chat_base_url)
             return chat
         except Exception as e:
-            cfg.mark_degraded(f"채팅 sLLM 백엔드 연결 실패: {e}")
+            cfg.mark_degraded(f"Could not connect to the chat sLLM backend: {e}")
             log.warning("vLLM chat unavailable, using mock: %s", e)
     return MockChatLLM()
 

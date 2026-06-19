@@ -15,21 +15,21 @@ from pathlib import Path
 # 그리기 키(builder_key)는 _draw_scene가 어떤 도형을 그릴지 결정하는 식별자다.
 _SCENES = [
     ("outdoor_night", "motorcycle_parked_night", "motorcycle_night",
-     "밤에 도로변에 오토바이가 주차되어 있는 야간 장면"),
+     "A motorcycle parked by the road at night"),
     ("outdoor_night", "street_people_night", "people_night",
-     "야간 거리에 사람들이 지나다니는 모습"),
+     "People walking on a street at night"),
     ("street_day", "people_crosswalk_day", "people_day",
-     "낮에 대로변 횡단보도를 사람들이 건너는 장면"),
+     "People crossing a crosswalk on a daytime avenue"),
     ("street_day", "cars_traffic_day", "cars_day",
-     "주간 도로 위 자동차 차량 통행 장면"),
+     "Cars driving on a road during the day"),
     ("emergency", "fire_smoke_building", "fire",
-     "건물에서 불과 연기가 발생한 화재 장면"),
+     "A fire with flames and smoke at a building"),
     ("emergency", "smoke_only_field", "smoke",
-     "들판에 연기가 자욱하게 퍼진 장면"),
+     "Smoke spreading across a field"),
     ("parking", "cars_parking_lot_day", "cars_day",
-     "주간 주차장에 자동차들이 주차되어 있는 장면"),
+     "Cars parked in a daytime parking lot"),
     ("nature", "beach_sea_day", "beach",
-     "맑은 낮 바다 해변 풍경"),
+     "A clear daytime beach by the sea"),
 ]
 
 
@@ -125,7 +125,7 @@ def generate_sample_dataset(
             img.save(leaf / f"{stem}.jpg", quality=88)
             # 이미지 옆에 같은 이름의 사이드카 .txt 캡션을 둔다(프레임 번호 포함).
             (leaf / f"{stem}.txt").write_text(
-                f"{caption} (프레임 {i + 1}/{per_scene})", encoding="utf-8"
+                f"{caption} (frame {i + 1}/{per_scene})", encoding="utf-8"
             )
     return root
 

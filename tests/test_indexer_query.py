@@ -86,7 +86,7 @@ def test_image_granularity_with_yolo_labels(tmp_path):
     svc = SearchService(emb, store, chat, cfg)
     res = svc.query("사람", k=4)
     assert res.hits
-    assert any("탐지 객체" in h.caption for h in res.hits)  # caption from labels
+    assert any("Objects:" in h.caption for h in res.hits)  # caption from labels
     assert all(h.member_count == 1 for h in res.hits)       # per-image records
     # representative_image is the image itself (distinct paths)
     assert len({h.image_path for h in res.hits}) == len(res.hits)

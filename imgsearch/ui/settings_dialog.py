@@ -32,7 +32,7 @@ class SettingsDialog(QDialog):
 
     def __init__(self, config: AppConfig, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("설정")
+        self.setWindowTitle("Settings")
         self.setMinimumWidth(560)
         # 원본 config를 깊은 복사해 작업한다. '취소'를 눌러도 호출자의 설정이
         # 더럽혀지지 않도록 보장하기 위한 것이다.
@@ -41,30 +41,30 @@ class SettingsDialog(QDialog):
         root = QVBoxLayout(self)
 
         # --- 데이터셋 그룹 ---
-        ds_box = QGroupBox("데이터셋")
+        ds_box = QGroupBox("Dataset")
         ds_form = QFormLayout(ds_box)
         # 데이터셋 루트 입력 + '찾아보기' 버튼을 한 줄에 나란히 둔다.
         row = QHBoxLayout()
         self.dataset_root = QLineEdit(self._cfg.dataset_root)
-        browse = QPushButton("찾아보기…")
+        browse = QPushButton("Browse…")
         browse.clicked.connect(self._browse)
         row.addWidget(self.dataset_root, 1)
         row.addWidget(browse)
-        ds_form.addRow("데이터셋 루트", row)
+        ds_form.addRow("Dataset root", row)
         # 색인 단위 선택. 콤보 항목의 '데이터'에 config에 저장될 키("folder"/"image")를 담아둔다.
         self.granularity = QComboBox()
-        self.granularity.addItem("폴더당 대표 1장 (유사 장면 폴더)", "folder")
-        self.granularity.addItem("이미지별 개별 색인 (다양한 사진)", "image")
+        self.granularity.addItem("One representative per folder (similar-scene folders)", "folder")
+        self.granularity.addItem("Index each image separately (varied photos)", "image")
         # 저장된 값이 "image"면 두 번째 항목(인덱스 1), 아니면 첫 번째 항목을 선택한다.
         self.granularity.setCurrentIndex(1 if self._cfg.index_granularity == "image" else 0)
         self.granularity.setToolTip(
-            "변경하면 기존 인덱스와 호환되지 않아 전체 재빌드가 필요합니다."
+            "Changing this is incompatible with the existing index and requires a full rebuild."
         )
-        ds_form.addRow("색인 단위", self.granularity)
+        ds_form.addRow("Index unit", self.granularity)
         root.addWidget(ds_box)
 
         # --- 임베더 그룹 (검색 품질을 좌우하는 핵심 설정) ---
-        emb_box = QGroupBox("임베딩 (검색 핵심)")
+        emb_box = QGroupBox("Embedding (search core)")
         emb_form = QFormLayout(emb_box)
         # 백엔드 선택: mock(결정적 더미)과 실제 jina-clip 중 하나.
         self.embedder_backend = QComboBox()
@@ -85,58 +85,58 @@ class SettingsDialog(QDialog):
         # 저장된 값이 1024를 넘더라도 1024로 잘라(min) 범위 안에 들어오게 한다.
         self.embed_dim.setValue(min(int(self._cfg.embed_dim), 1024))
         self.embed_dim.setToolTip(
-            "jina-clip-v2는 64~1024 차원을 지원합니다. 변경 시 전체 재빌드가 필요합니다."
+            "jina-clip-v2 supports 64–1024 dimensions. Changing this requires a full rebuild."
         )
-        emb_form.addRow("백엔드", self.embedder_backend)
-        emb_form.addRow("모델 ID", self.embedder_model)
-        emb_form.addRow("디바이스", self.embedder_device)
-        emb_form.addRow("임베딩 차원", self.embed_dim)
+        emb_form.addRow("Backend", self.embedder_backend)
+        emb_form.addRow("Model ID", self.embedder_model)
+        emb_form.addRow("Device", self.embedder_device)
+        emb_form.addRow("Embedding dimensions", self.embed_dim)
         root.addWidget(emb_box)
 
         # --- 캡셔너(VLM) 그룹: 인덱싱 시 이미지 캡션을 생성하는 비전-언어 모델 설정 ---
-        vlm_box = QGroupBox("캡션 (VLM)")
+        vlm_box = QGroupBox("Caption (VLM)")
         vlm_form = QFormLayout(vlm_box)
-        self.caption_enabled = QCheckBox("인덱싱 시 대표 이미지 캡션 생성")
+        self.caption_enabled = QCheckBox("Generate captions for representative images during indexing")
         self.caption_enabled.setChecked(self._cfg.caption_enabled)
         self.vlm_backend = QComboBox()
         self.vlm_backend.addItems(["mock", "vllm"])
         self.vlm_backend.setCurrentText(self._cfg.vlm_backend)
         self.vlm_base_url = QLineEdit(self._cfg.vlm_base_url)
-        self.vlm_base_url.setToolTip("vLLM 등 OpenAI 호환 서버 주소 (예: http://localhost:8000/v1)")
+        self.vlm_base_url.setToolTip("OpenAI-compatible server address such as vLLM (e.g. http://localhost:8000/v1)")
         self.vlm_model = QLineEdit(self._cfg.vlm_model)
         self.vlm_api_key = QLineEdit(self._cfg.vlm_api_key)
         # API 키는 비밀번호처럼 가려서 표시한다(어깨너머 노출 방지).
         self.vlm_api_key.setEchoMode(QLineEdit.Password)
         vlm_form.addRow(self.caption_enabled)
-        vlm_form.addRow("백엔드", self.vlm_backend)
+        vlm_form.addRow("Backend", self.vlm_backend)
         vlm_form.addRow("Base URL", self.vlm_base_url)
-        vlm_form.addRow("모델", self.vlm_model)
+        vlm_form.addRow("Model", self.vlm_model)
         vlm_form.addRow("API Key", self.vlm_api_key)
         root.addWidget(vlm_box)
 
         # --- 채팅 sLLM 그룹: 검색 결과를 자연어로 요약하는 소형 LLM 설정 ---
-        chat_box = QGroupBox("채팅 sLLM")
+        chat_box = QGroupBox("Chat sLLM")
         chat_form = QFormLayout(chat_box)
-        self.summarize_enabled = QCheckBox("검색 결과 요약 생성")
+        self.summarize_enabled = QCheckBox("Generate a summary of search results")
         self.summarize_enabled.setChecked(self._cfg.summarize_enabled)
         self.chat_backend = QComboBox()
         self.chat_backend.addItems(["mock", "vllm"])
         self.chat_backend.setCurrentText(self._cfg.chat_backend)
         self.chat_base_url = QLineEdit(self._cfg.chat_base_url)
-        self.chat_base_url.setToolTip("vLLM 등 OpenAI 호환 서버 주소 (예: http://localhost:8000/v1)")
+        self.chat_base_url.setToolTip("OpenAI-compatible server address such as vLLM (e.g. http://localhost:8000/v1)")
         self.chat_model = QLineEdit(self._cfg.chat_model)
         self.chat_api_key = QLineEdit(self._cfg.chat_api_key)
         # VLM과 마찬가지로 채팅 API 키도 가려서 표시한다.
         self.chat_api_key.setEchoMode(QLineEdit.Password)
         chat_form.addRow(self.summarize_enabled)
-        chat_form.addRow("백엔드", self.chat_backend)
+        chat_form.addRow("Backend", self.chat_backend)
         chat_form.addRow("Base URL", self.chat_base_url)
-        chat_form.addRow("모델", self.chat_model)
+        chat_form.addRow("Model", self.chat_model)
         chat_form.addRow("API Key", self.chat_api_key)
         root.addWidget(chat_box)
 
         # --- 검색/표시 그룹: 결과 개수와 썸네일 크기 등 화면 관련 옵션 ---
-        ret_box = QGroupBox("검색/표시")
+        ret_box = QGroupBox("Search / Display")
         ret_form = QFormLayout(ret_box)
         # 검색 시 가져올 상위 결과 개수(top-k).
         self.top_k = QSpinBox()
@@ -147,22 +147,22 @@ class SettingsDialog(QDialog):
         self.thumb_size.setRange(96, 512)
         self.thumb_size.setSingleStep(32)
         self.thumb_size.setValue(self._cfg.thumb_size)
-        ret_form.addRow("결과 개수 (top-k)", self.top_k)
-        ret_form.addRow("썸네일 크기(px)", self.thumb_size)
+        ret_form.addRow("Results (top-k)", self.top_k)
+        ret_form.addRow("Thumbnail size (px)", self.thumb_size)
         root.addWidget(ret_box)
 
         # --- 객체 그래프 그룹: 객체 동시 출현을 저장/조회할 GraphDB 백엔드 선택 ---
-        graph_box = QGroupBox("객체 그래프 (GraphDB)")
+        graph_box = QGroupBox("Object graph (GraphDB)")
         graph_form = QFormLayout(graph_box)
         # 콤보 항목 '데이터'에 config 키("memory"/"kuzu")를 담아 둔다(표시 문구와 분리).
         self.graph_backend = QComboBox()
-        self.graph_backend.addItem("메모리 (내장, 의존성 없음)", "memory")
-        self.graph_backend.addItem("kuzu (임베디드 GraphDB, [graph] 설치 필요)", "kuzu")
+        self.graph_backend.addItem("Memory (built-in, no dependencies)", "memory")
+        self.graph_backend.addItem("kuzu (embedded GraphDB, requires [graph] install)", "kuzu")
         self.graph_backend.setCurrentIndex(1 if self._cfg.graph_backend == "kuzu" else 0)
         self.graph_backend.setToolTip(
-            "kuzu는 'uv sync --extra graph' 설치가 필요하며, 없으면 메모리 그래프로 자동 대체됩니다."
+            "kuzu requires 'uv sync --extra graph'; without it, the memory graph is used automatically."
         )
-        graph_form.addRow("그래프 백엔드", self.graph_backend)
+        graph_form.addRow("Graph backend", self.graph_backend)
         root.addWidget(graph_box)
 
         # 저장/취소 버튼. 저장은 accept(), 취소는 reject()로 다이얼로그를 닫는다.
@@ -175,7 +175,7 @@ class SettingsDialog(QDialog):
         """'찾아보기' 버튼: 폴더 선택 대화상자를 열어 데이터셋 루트를 채운다."""
         # 현재 입력된 경로를 시작 위치로 사용한다(없으면 빈 문자열).
         start = self.dataset_root.text() or ""
-        chosen = QFileDialog.getExistingDirectory(self, "데이터셋 폴더 선택", start)
+        chosen = QFileDialog.getExistingDirectory(self, "Select dataset folder", start)
         # 사용자가 취소하면 빈 문자열이 오므로 그때는 기존 값을 그대로 둔다.
         if chosen:
             self.dataset_root.setText(chosen)

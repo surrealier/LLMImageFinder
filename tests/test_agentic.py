@@ -71,8 +71,8 @@ def test_agentic_graph_filter_requires_all_objects(tmp_path):
     assert res.hits
     assert all("오토바이" in h.caption and "사람" in h.caption for h in res.hits)
     assert len(res.hits) == 2
-    assert any("그래프 필터" in s for s in steps)  # A2A trace emitted
-    assert any("계획" in s for s in steps)
+    assert any("Graph filter" in s for s in steps)  # A2A trace emitted
+    assert any("Plan" in s for s in steps)
 
 
 def test_agentic_exclusion(tmp_path):
@@ -107,7 +107,7 @@ def test_agentic_graph_mismatch_falls_back(tmp_path):
     steps: list[str] = []
     res = agent.run("사람과 오토바이", step_cb=steps.append, k=10)
     assert res.hits  # not empty — filter was skipped
-    assert any("일치하지 않아" in s for s in steps)
+    assert any("skipped" in s for s in steps)
 
 
 def test_agentic_uses_chat_plan_when_available(tmp_path):

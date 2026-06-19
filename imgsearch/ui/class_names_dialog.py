@@ -44,14 +44,14 @@ class ClassNamesDialog(QDialog):
         - names: 이미 저장돼 있는 {클래스 ID: 이름}(있으면 미리 채워진다).
         """
         super().__init__(parent)
-        self.setWindowTitle("클래스 이름 설정")
+        self.setWindowTitle("Class names")
         self.setMinimumSize(460, 380)
 
         root = QVBoxLayout(self)
         info = QLabel(
-            "데이터셋의 YOLO 라벨에서 발견된 클래스 ID입니다. 캡션과 검색 요약에 사용할 "
-            "이름을 입력하세요. 비워두면 ‘#ID’로 표시됩니다.\n"
-            "(이름은 앱 설정 폴더의 class_names.yaml로 저장되며, 데이터셋 폴더는 수정하지 않습니다)"
+            "These class IDs were found in the dataset's YOLO labels. Enter names to use in "
+            "captions and search summaries. If left blank, they are shown as '#ID'.\n"
+            "(Names are saved to class_names.yaml in the app settings folder; the dataset folder is not modified)"
         )
         info.setWordWrap(True)
         info.setStyleSheet("color:#94a3b8;")
@@ -61,7 +61,7 @@ class ClassNamesDialog(QDialog):
         all_ids = sorted(set(class_counts) | set(names), key=_sort_key)
         # 3열 표: 클래스 ID / 박스 수 / 이름. 행 수는 모든 클래스 개수.
         self.table = QTableWidget(len(all_ids), 3, self)
-        self.table.setHorizontalHeaderLabels(["클래스 ID", "박스 수", "이름"])
+        self.table.setHorizontalHeaderLabels(["Class ID", "Boxes", "Name"])
         self.table.verticalHeader().setVisible(False)
         header = self.table.horizontalHeader()
         # ID/박스 수 열은 내용에 맞게 좁히고, 이름 열만 남은 공간을 늘려 차지하게 한다.

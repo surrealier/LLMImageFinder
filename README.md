@@ -43,7 +43,7 @@ You have thousands of images in nested folders. You remember *what's in one* —
 | 🔀 | **Hybrid retrieval?** | Vector (meaning) **+** BM25 (exact terms) fused by Reciprocal Rank Fusion — switch Vector / Keyword / Hybrid in the header |
 | 🕸️ | **Structured object queries?** | An embedded GraphDB answers "images containing **all** of {person, motorcycle}" and "what co-occurs with X" |
 | 🤖 | **Agentic search?** | A *plan → hybrid-search → graph-filter → summarize* pipeline, with every step traced in the chat |
-| 🧠 | **RAG summaries?** | A small LLM refines your query and writes a grounded Korean summary over the retrieved set |
+| 🧠 | **RAG summaries?** | A small LLM refines your query and writes a grounded summary over the retrieved set |
 | 🏷️ | **Labeled (YOLO) datasets?** | Per-image indexing, captions from labels, a class-name editor, and a bounding-box overlay in the viewer |
 | 🖼️ | **Fast inspection?** | Thumbnail gallery, zoom/pan viewer, ranked ←/→ navigation, "find similar", CSV/clipboard export |
 | 🔌 | **Zero-setup demo?** | Mock-first: the whole app (incl. hybrid/graph/agent) runs deterministically with **no ML deps** |
@@ -79,7 +79,7 @@ The app starts in **mock mode** (a yellow banner says so). Indexing → search �
 uv run imgsearch --make-sample .\sample_dataset
 ```
 
-…or click **샘플 데이터셋 생성** in the toolbar, then type a query like `불과 연기가 있는 이미지` ("images with fire and smoke") in the chat.
+…or click **Generate sample dataset** in the toolbar, then type a query like `fire and smoke` in the chat.
 
 ## 🧠 Turn on real models
 
@@ -141,11 +141,10 @@ uv run python scripts/ui_smoke.py         # offscreen GUI smoke
 
 ## 📚 Docs
 
-- 📐 **Architecture & design philosophy** (RAG · VectorDB · Hybrid · GraphDB · multi-agent · vLLM): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- 🇰🇷 **한국어 상세 사용 설명서**: [`README.ko.md`](README.ko.md)
+- 📐 **Architecture & design philosophy** (RAG · VectorDB · Hybrid · GraphDB · multi-agent · vLLM): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) *(written in Korean)*
 - 📝 **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
 
-The source code is heavily commented (in Korean) throughout.
+The UI and outputs are English; the source code is heavily commented in Korean.
 
 ## 📄 License
 

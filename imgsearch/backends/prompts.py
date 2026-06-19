@@ -1,70 +1,59 @@
-"""실제(vLLM / OpenAI 호환) 백엔드들이 공유하는 한국어 프롬프트 모음.
+"""실제(vLLM / OpenAI 호환) 백엔드가 공유하는 프롬프트 모음.
 
-백엔드 클래스 밖으로 빼두어서 transformers/Ollama/vLLM이 모두 동일하게 동작하도록 한다
-(프롬프트를 한 곳에 모아 백엔드별 미세한 차이를 없앤다).
-
-주의: 아래 문자열들은 런타임에 LLM으로 전송되는 프롬프트(런타임 문자열)이므로
-내용을 수정하면 모델 동작이 바뀐다. 한국어 주석만 추가하고 문자열은 절대 변경하지 않는다.
-``{query}``, ``{classes}``, ``{n}``, ``{context}`` 등은 str.format 치환 자리이며,
+백엔드 클래스 밖에 두어 transformers/Ollama/vLLM 어디서든 동일하게 동작하게 한다.
+공개 릴리스에서는 앱이 영어 중심이므로 모델 출력도 영어로 유도한다.
 PLAN_USER의 ``{{ }}``는 format 후 리터럴 중괄호로 남아 JSON 예시가 된다.
 """
 
-# 캡션 생성 시스템 프롬프트: 모델에게 "이미지 분석 전문가" 역할을 부여한다.
 CAPTION_SYSTEM = (
-    "당신은 이미지 분석 전문가입니다. 이미지를 보고 핵심 객체와 장면을 한국어로 "
-    "정확하고 간결하게 설명합니다."
+    "You are an expert image analyst. Describe the key objects and scene in an "
+    "image accurately and concisely in English."
 )
 
-# 캡션 생성 사용자 프롬프트: 객체/장면/시간대/특이사항을 포함한 1~2문장 설명만 요구(머리말 금지).
 CAPTION_USER = (
-    "이 이미지를 한국어로 한두 문장으로 설명하세요. 다음을 포함하세요: "
-    "주요 객체/대상, 장면(실내/실외·장소), 시간대(주간/야간), 특이사항(불·연기·사고 등). "
-    "사족이나 머리말 없이 설명 문장만 출력하세요."
+    "Describe this image in one or two English sentences. Include: the main "
+    "objects/subjects, the scene (indoor/outdoor, place), the time of day "
+    "(day/night), and anything notable (fire, smoke, accident, etc.). "
+    "Output only the description, with no preamble."
 )
 
-# 질의 정제 시스템 프롬프트: 사용자 요청에서 검색에 유용한 핵심 시각 요소를 뽑는 역할 부여.
 REFINE_SYSTEM = (
-    "당신은 이미지 검색 보조자입니다. 사용자의 한국어 요청에서 찾고자 하는 이미지의 "
-    "핵심 시각 요소를 추출합니다."
+    "You are an image-search assistant. Extract the key visual elements the user "
+    "is looking for from their request."
 )
 
-# 질의 정제 사용자 프롬프트: {query}에 원본 질의가 치환되며, 키워드만 한 줄로(설명 없이) 받는다.
 REFINE_USER = (
-    "다음 검색 요청에서 찾으려는 이미지의 핵심 키워드를 쉼표로 구분해 출력하세요. "
-    "한국어 키워드를 우선하되 필요하면 영어를 병기하세요. 설명 없이 키워드만 한 줄로.\n\n"
-    "요청: {query}"
+    "From the search request below, output the key visual keywords, comma-separated, "
+    "on a single line with no explanation.\n\n"
+    "Request: {query}"
 )
 
-# 요약 시스템 프롬프트: 검색된 폴더 설명만 근거로 답하고 환각(없는 내용 지어내기)을 금지한다.
 SUMMARY_SYSTEM = (
-    "당신은 이미지 검색 결과를 설명하는 보조자입니다. 검색된 폴더 설명을 근거로 "
-    "사용자 질의에 맞는 결과를 한국어로 요약합니다. 근거에 없는 내용은 지어내지 마세요."
+    "You are an assistant that explains image-search results. Summarize the results "
+    "for the user's query, grounded in the retrieved folder descriptions. Do not make "
+    "up anything that is not supported by them."
 )
 
-# 요약 사용자 프롬프트: {query}(질의), {n}(폴더 개수), {context}(폴더별 설명)가 치환된다.
 SUMMARY_USER = (
-    "사용자 질의: {query}\n"
-    "검색된 폴더 {n}개의 대표 설명:\n{context}\n\n"
-    "위 결과를 1~2문장 한국어로 요약하세요. 가장 관련성 높은 폴더를 우선 언급하세요."
+    "User query: {query}\n"
+    "Representative descriptions of the {n} retrieved folders:\n{context}\n\n"
+    "Summarize the results in 1-2 English sentences, mentioning the most relevant folder first."
 )
 
-# --- 에이전트형 플래너: 질의를 구조화된 검색 계획으로 분해 ---
 # 계획 시스템 프롬프트: 질의를 (의미 검색 텍스트 + 객체 필터)로 분해하고 반드시 JSON만 출력하게 강제.
 PLAN_SYSTEM = (
-    "당신은 이미지 검색 플래너입니다. 사용자의 한국어 요청을 의미 검색 텍스트와 "
-    "객체 필터로 분해합니다. 반드시 JSON만 출력합니다."
+    "You are an image-search planner. Decompose the user's request into a semantic "
+    "search text and object filters. You must output JSON only."
 )
 
-# 계획 사용자 프롬프트: {classes}(허용 클래스 목록)와 {query}가 치환된다.
 # 본문의 {{ }}는 format 처리 후 리터럴 중괄호로 남아, 모델에게 보여줄 JSON 스키마 예시가 된다.
-# 또한 required/excluded 값은 위 클래스 목록 내 이름만 쓰도록 제약해 환각 클래스명을 막는다.
 PLAN_USER = (
-    "사용 가능한 객체 클래스: {classes}\n"
-    "사용자 요청: {query}\n\n"
-    "다음 JSON 스키마로만 답하세요(설명·코드펜스 금지):\n"
-    '{{"semantic": "장면을 묘사하는 검색 텍스트", '
-    '"required_objects": ["반드시 포함할 클래스명"], '
-    '"excluded_objects": ["제외할 클래스명"]}}\n'
-    "required_objects/excluded_objects의 값은 위 클래스 목록에 있는 이름만 사용하고, "
-    "해당 없으면 빈 배열로 두세요."
+    "Available object classes: {classes}\n"
+    "User request: {query}\n\n"
+    "Answer with ONLY this JSON schema (no explanation, no code fences):\n"
+    '{{"semantic": "text describing the scene to search for", '
+    '"required_objects": ["class names that must be present"], '
+    '"excluded_objects": ["class names to exclude"]}}\n'
+    "Use only names from the class list above for required_objects/excluded_objects; "
+    "leave them as empty arrays if none apply."
 )

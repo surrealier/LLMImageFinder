@@ -27,10 +27,17 @@ _JOSA = [
 _JOSA.sort(key=len, reverse=True)
 
 # 시각적 의미가 없는 검색 메타 단어(불용어). 피처에서 제외해 잡음을 줄인다.
+# 한국어 단어는 그대로 두고(다국어 질의 지원), 영어 메타 단어를 함께 둔다.
 STOPWORDS = {
+    # Korean meta words (kept for multilingual queries)
     "이미지", "사진", "그림", "사진들", "리스트", "목록", "장면", "모습", "느낌",
     "찾아줘", "찾아", "찾기", "검색", "보여줘", "보여", "줘", "관련", "그리고",
     "또는", "좀", "것", "거", "등", "수", "그", "이런", "저런", "어떤", "해줘",
+    # English meta words
+    "image", "images", "photo", "photos", "picture", "pictures", "pic", "pics",
+    "scene", "scenes", "shot", "shots", "find", "show", "search", "list",
+    "the", "a", "an", "of", "with", "in", "on", "at", "and", "or", "to",
+    "please", "me", "that", "this", "some", "any", "is", "are", "it",
 }
 
 # 한국어 토큰 -> 추가 영어/유의어 항목. mock 모드에서 한국어 질의가 영어로 명명된
@@ -81,28 +88,29 @@ KO2EN: dict[str, list[str]] = {
     "야외": ["outdoor"],
 }
 
-# 개념 트리거(한국어 또는 소문자 영어) -> mock 캡션에 쓰일 한국어 표현.
-# 토큰이 이 사전에 걸리면 해당 한국어 개념 문구를 캡션 힌트로 끌어온다.
+# 개념 트리거(한국어 또는 소문자 영어) -> mock 캡션에 쓰일 영어 표현.
+# 토큰이 이 사전에 걸리면 해당 영어 개념 문구를 캡션 힌트로 끌어온다.
+# (한국어 키도 함께 두어 한국어 질의에서도 같은 개념을 끌어낼 수 있게 한다.)
 CONCEPTS: dict[str, str] = {
-    "fire": "불/화재", "불": "불/화재", "화재": "불/화재", "flame": "불꽃",
-    "smoke": "연기", "연기": "연기",
-    "motorcycle": "오토바이", "motorbike": "오토바이", "오토바이": "오토바이",
-    "bike": "이륜차", "scooter": "스쿠터",
-    "night": "야간", "밤": "야간", "야간": "야간", "dark": "어두움",
-    "day": "주간", "낮": "주간",
-    "parking": "주차", "parked": "주차", "주차": "주차",
-    "person": "사람", "people": "사람", "pedestrian": "보행자",
-    "사람": "사람", "보행자": "보행자", "crowd": "군중",
-    "street": "거리/도로", "road": "도로", "거리": "거리", "도로": "도로",
-    "대로변": "대로변",
-    "car": "자동차", "vehicle": "차량", "자동차": "자동차", "truck": "트럭",
-    "bus": "버스", "bicycle": "자전거", "자전거": "자전거",
-    "dog": "강아지", "개": "강아지", "cat": "고양이", "고양이": "고양이",
-    "sea": "바다", "ocean": "바다", "beach": "해변", "바다": "바다", "해변": "해변",
-    "building": "건물", "건물": "건물",
-    "rain": "비", "snow": "눈", "fog": "안개",
-    "crosswalk": "횡단보도", "횡단보도": "횡단보도",
-    "indoor": "실내", "outdoor": "야외",
+    "fire": "fire", "불": "fire", "화재": "fire", "flame": "flames",
+    "smoke": "smoke", "연기": "smoke",
+    "motorcycle": "motorcycle", "motorbike": "motorcycle", "오토바이": "motorcycle",
+    "bike": "two-wheeler", "scooter": "scooter",
+    "night": "night", "밤": "night", "야간": "night", "dark": "dark",
+    "day": "daytime", "낮": "daytime",
+    "parking": "parking", "parked": "parking", "주차": "parking",
+    "person": "person", "people": "person", "pedestrian": "pedestrian",
+    "사람": "person", "보행자": "pedestrian", "crowd": "crowd",
+    "street": "street", "road": "road", "거리": "street", "도로": "road",
+    "대로변": "avenue",
+    "car": "car", "vehicle": "vehicle", "자동차": "car", "truck": "truck",
+    "bus": "bus", "bicycle": "bicycle", "자전거": "bicycle",
+    "dog": "dog", "개": "dog", "cat": "cat", "고양이": "cat",
+    "sea": "sea", "ocean": "sea", "beach": "beach", "바다": "sea", "해변": "beach",
+    "building": "building", "건물": "building",
+    "rain": "rain", "snow": "snow", "fog": "fog",
+    "crosswalk": "crosswalk", "횡단보도": "crosswalk",
+    "indoor": "indoor", "outdoor": "outdoor",
 }
 
 # 토큰 경계 정규식: 숫자/영문/한글이 연속된 덩어리만 토큰으로 인정(공백·기호 등은 구분자).

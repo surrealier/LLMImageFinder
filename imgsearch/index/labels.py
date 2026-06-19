@@ -112,7 +112,7 @@ def caption_from_boxes(boxes: Sequence[Box], class_names: Optional[dict] = None)
     for nm, cnt in sorted(name_counts.items(), key=lambda kv: (-kv[1], kv[0])):
         # 2개 이상이면 "이름×개수", 1개면 이름만 표기.
         parts.append(f"{nm}×{cnt}" if cnt > 1 else nm)
-    return "탐지 객체: " + ", ".join(parts)
+    return "Objects: " + ", ".join(parts)
 
 
 def yolo_caption(path: str | Path, class_names: Optional[dict] = None) -> str:

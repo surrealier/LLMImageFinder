@@ -145,26 +145,26 @@ class MockCaptioner:
         bright = _mean_brightness(image_path)
         # 평균 밝기를 구간으로 나눠 조명/시간대를 자연어로 표현한다(임계값은 경험적으로 정한 값).
         if bright is None:
-            light = "환경 미상의"  # 이미지를 읽지 못한 경우
+            light = "unknown-lighting"  # 이미지를 읽지 못한 경우
         elif bright < 60:
-            light = "어두운(야간) 환경의"
+            light = "dark (night)"
         elif bright < 110:
-            light = "다소 어두운 환경의"
+            light = "dimly lit"
         elif bright < 185:
-            light = "보통 밝기의"
+            light = "normally lit"
         else:
-            light = "밝은(주간) 환경의"
+            light = "bright (daytime)"
 
         # 경로 텍스트와 context를 합쳐 개념 사전에서 매칭되는 힌트(예: 차량, 화재 등)를 뽑는다.
         hints = koutil.concept_hints(_path_text(image_path) + " " + context)
-        caption = f"{light} 사진"
+        caption = f"{light} photo"
         if hints:
             caption += " — " + ", ".join(hints)
-        caption += f" (폴더: {p.parent.name})"
+        caption += f" (folder: {p.parent.name})"
         # context의 연속 공백을 단일 공백으로 정리한 뒤
         ctx = " ".join(context.split())
         if ctx:
-            caption += f". 메모: {ctx[:80]}"  # 메모는 너무 길어지지 않도록 80자로 자른다
+            caption += f". note: {ctx[:80]}"  # 메모는 너무 길어지지 않도록 80자로 자른다
         return caption
 
 
@@ -181,12 +181,12 @@ class MockChatLLM:
         """검색 결과(hits)를 템플릿에 끼워 한국어 요약 문장을 만든다. 결과가 없으면 안내 문구 반환."""
         if not hits:
             return (
-                f"'{query}'에 해당하는 이미지를 찾지 못했습니다. "
-                "다른 키워드나 표현으로 다시 검색해 보세요."
+                f"No images matched '{query}'. "
+                "Try different keywords or phrasing."
             )
         # 상위 3개 폴더명만 미리보기로 보여준다.
         tops = ", ".join(Path(h.folder).name for h in hits[:3])
         return (
-            f"'{query}' 검색 결과 상위 {len(hits)}개 폴더를 찾았습니다. "
-            f"가장 유사한 폴더: {tops}. 대표 설명: {hits[0].caption}"
+            f"Found {len(hits)} matching folders for '{query}'. "
+            f"Most similar: {tops}. Top caption: {hits[0].caption}"
         )

@@ -86,11 +86,11 @@ class GalleryDelegate(QStyledItemDelegate):
         elif index.data(FAILED_ROLE):
             # 썸네일 생성 실패(파일 이동/손상) — '영원히 로딩 중'으로 오해하지 않도록 명시.
             painter.setPen(QColor("#f59e0b"))
-            painter.drawText(thumb, Qt.AlignCenter, "썸네일 표시 불가\n(파일 확인 필요)")
+            painter.drawText(thumb, Qt.AlignCenter, "Thumbnail unavailable\n(check the file)")
         else:
             # 아직 디코딩 전(백그라운드 작업 대기) — 곧 _on_thumb가 PIXMAP_ROLE을 채운다.
             painter.setPen(QColor("#5b6675"))
-            painter.drawText(thumb, Qt.AlignCenter, "이미지 로딩…")
+            painter.drawText(thumb, Qt.AlignCenter, "Loading image…")
 
         fm = option.fontMetrics
         inner_w = rect.width() - 2 * _PAD  # 텍스트가 쓸 수 있는 가로 폭
@@ -107,7 +107,7 @@ class GalleryDelegate(QStyledItemDelegate):
         name = os.path.basename(str(index.data(FOLDER_ROLE) or "").rstrip("/\\"))
         members = index.data(MEMBERS_ROLE)
         if members and int(members) > 1:
-            name = f"{name}  ·  {int(members)}장"
+            name = f"{name}  ·  {int(members)} images"
         y_name = y_cap + fm.height()
         painter.setPen(QColor("#94a3b8"))
         # 폴더명은 가운데 말줄임(ElideMiddle)이라 앞/뒤 정보를 모두 남긴다.
