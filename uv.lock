@@ -449,7 +449,6 @@ wheels = [
 
 [[package]]
 name = "imgsearch"
-version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "chromadb" },
@@ -497,7 +496,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'embed'", specifier = ">=2.4,<2.7", index = "https://download.pytorch.org/whl/cu124" },
     { name = "transformers", marker = "extra == 'embed'", specifier = ">=4.41,<5" },
 ]
-provides-extras = ["embed", "graph", "dev"]
+provides-extras = ["dev", "embed", "graph"]
 
 [[package]]
 name = "importlib-resources"

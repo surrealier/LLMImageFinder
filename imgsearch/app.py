@@ -7,9 +7,11 @@ import sys
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
+from imgsearch import __version__
 from imgsearch.config import AppConfig
 from imgsearch.logging_setup import setup_logging
 from imgsearch.paths import app_paths, ensure_dirs
+from imgsearch.ui.appicon import app_icon
 
 # 다크 테마 스타일시트(QSS). 색상/여백 등 앱 전반의 외형을 한 곳에서 정의한다.
 # 주의: 이 문자열은 런타임에 그대로 사용되는 스타일 정의이므로 내용을 바꾸지 말 것.
@@ -59,13 +61,33 @@ def _apply_theme(app: QApplication) -> None:
     app.setStyleSheet(_QSS)
 
 
+def _set_windows_app_id() -> None:
+    """Windows에서 작업표시줄 아이콘이 제대로 묶이도록 명시적 AppUserModelID를 설정한다.
+
+    이게 없으면 Windows가 파이썬 런처(pythonw.exe)의 일반 아이콘을 작업표시줄에 쓰고,
+    우리가 setWindowIcon으로 지정한 아이콘이 무시된다. Windows 전용이며, 실패해도 무시한다.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("surrealier.LLMImageFinder")
+    except Exception:
+        pass  # AppUserModelID 설정 실패는 외형 문제일 뿐 — 앱 동작에는 지장 없음
+
+
 def build_app() -> QApplication:
-    """QApplication 인스턴스를 가져오거나 새로 만들고, 메타데이터와 테마를 설정한다."""
+    """QApplication 인스턴스를 가져오거나 새로 만들고, 메타데이터·아이콘·테마를 설정한다."""
+    _set_windows_app_id()  # QApplication 생성 전에 호출해야 작업표시줄 묶임에 반영된다
     # 이미 인스턴스가 있으면 재사용(테스트 등 한 프로세스에서 중복 생성 방지).
     app = QApplication.instance() or QApplication(sys.argv)
     # 앱/조직 이름은 QSettings 등이 사용자 설정 경로를 결정할 때 활용된다.
     app.setApplicationName("ImgSearch")
+    app.setApplicationDisplayName("LLMImageFinder")
     app.setOrganizationName("MarkAny")
+    app.setApplicationVersion(__version__)  # 단일 출처(__init__.py)에서 읽은 버전
+    app.setWindowIcon(app_icon())  # 코드로 생성한 돋보기 아이콘(별도 에셋 없음)
     _apply_theme(app)
     return app
 

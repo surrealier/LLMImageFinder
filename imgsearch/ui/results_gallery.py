@@ -10,7 +10,15 @@ import os
 from typing import Sequence
 
 from PySide6.QtCore import QSize, Qt, QThreadPool, Signal
-from PySide6.QtGui import QGuiApplication, QImage, QPixmap, QStandardItem, QStandardItemModel
+from PySide6.QtGui import (
+    QColor,
+    QGuiApplication,
+    QImage,
+    QPainter,
+    QPixmap,
+    QStandardItem,
+    QStandardItemModel,
+)
 from PySide6.QtWidgets import QAbstractItemView, QListView, QMenu
 
 from imgsearch.core.models import FolderHit
@@ -68,9 +76,31 @@ class ResultsGallery(QListView):
         self._sig.done.connect(self._on_thumb)  # 워커 → GUI 스레드로 완료 썸네일 전달
         self._by_path: dict[str, QStandardItem] = {}  # 경로 → 해당 타일 아이템(완료 시 역참조)
         self._gen = 0  # 검색마다 +1. 이전 세대의 뒤늦은 작업 결과는 무시한다.
+        # 결과가 0개일 때 격자 한가운데 그려 줄 안내 문구(빈 상태/첫 실행 가이드).
+        self._empty_text = ""
 
         self.doubleClicked.connect(self._on_double)
         self.selectionModel().currentChanged.connect(self._on_current)
+
+    def set_empty_message(self, text: str) -> None:
+        """결과가 0개일 때 갤러리 한가운데 표시할 안내 문구를 설정한다(즉시 다시 그림).
+
+        타일이 하나라도 있으면 이 문구는 그려지지 않으므로(결과가 우선), 언제 호출해도 안전하다.
+        """
+        self._empty_text = text or ""
+        self.viewport().update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        """기본 격자 렌더링 후, 표시할 타일이 없으면 안내 문구를 중앙에 겹쳐 그린다."""
+        super().paintEvent(event)
+        if self._model.rowCount() > 0 or not self._empty_text:
+            return  # 결과가 있거나 안내 문구가 없으면 오버레이를 그리지 않는다
+        painter = QPainter(self.viewport())
+        painter.setPen(QColor("#6b7689"))  # 차분한 회색 — 배경과 대비되되 튀지 않게
+        # 좌우 여백을 둔 사각형 안에서 가운데 정렬 + 자동 줄바꿈으로 문구를 그린다.
+        rect = self.viewport().rect().adjusted(40, 40, -40, -40)
+        painter.drawText(rect, Qt.AlignCenter | Qt.TextWordWrap, self._empty_text)
+        painter.end()
 
     def set_thumb_size(self, size: int) -> None:
         """다음 검색부터 사용할 썸네일 크기를 갱신한다(현재 표시 중인 타일은 그대로)."""
@@ -146,6 +176,10 @@ class ResultsGallery(QListView):
     def current_hit(self) -> FolderHit | None:
         idx = self.currentIndex()
         return idx.data(HIT_ROLE) if idx.isValid() else None
+
+    def result_count(self) -> int:
+        """현재 표시 중인 결과 타일 수(빈 상태 안내 문구를 띄울지 판단할 때 사용)."""
+        return self._model.rowCount()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
         hit = self.current_hit()

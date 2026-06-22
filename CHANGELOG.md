@@ -1,109 +1,171 @@
 # Changelog
 
+## v0.3.1 — 2026-06-22
+
+Release-hardening pass for a polished public release: branding, first-run UX,
+packaging metadata, observability, CI, and English documentation. No behavior
+changes to search/indexing — the v0.2.0-audited core is unchanged.
+
+### Branding & UX
+- **App icon** — a code-generated magnifier icon (no shipped binary asset) now
+  appears in the title bar and the Windows taskbar (explicit AppUserModelID).
+- **Help menu** — `Help → About` (version, description, repo/docs links, MIT) and
+  `Help → Keyboard shortcuts` (a single list of every binding).
+- **Version is visible** — shown in the status bar and the About dialog.
+- **First-run empty-state** — the gallery now shows guidance when there are no
+  results: "no index yet → Generate sample dataset / Build index", "ready → describe
+  an image", or, after a search, "no matches → lower Score ≥ / rephrase".
+- **Clearer copy** — plainer tooltips for the search-mode and agent toggles, a
+  reassurance that the dataset is never modified, and an actionable "no results"
+  message.
+
+### Packaging & release hygiene
+- **Single source of truth for the version** — `pyproject.toml` reads the version
+  from `imgsearch/__init__.py` (`[tool.hatch.version]`); the stale `0.1.0` dunder is
+  fixed. A test asserts the installed metadata matches `__version__`.
+- **Full project metadata** — `authors`, SPDX `license`, `keywords`, trove
+  `classifiers`, and `project.urls` (homepage/repository/issues/changelog).
+- **Continuous integration** — GitHub Actions runs the test suite + the offscreen GUI
+  smoke on Windows and Linux (Python 3.12) on every push/PR.
+
+### Observability
+- `ChromaStore` no longer swallows exceptions silently — `count`, `all_ids`,
+  `get_embedding`, `get_embeddings` (per batch), and `existing_mtimes` now log a
+  warning while keeping their safe fallbacks, so a corrupt/locked store is diagnosable
+  instead of silently looking "empty".
+
+### Docs
+- `docs/ARCHITECTURE.md` and this changelog translated to English (the UI and outputs
+  were already English; source-code comments remain Korean by design).
+
+### Tests
+- 84 → 90: package-metadata/version consistency, the About and Keyboard-shortcuts
+  dialogs, the gallery empty-state, and app-icon construction.
+
 ## v0.3.0 — 2026-06-15
 
-RAG/VectorDB/멀티에이전트/하이브리드 검색/GraphDB/vLLM를 한 릴리스로. 5명 아키텍트의
-설계 + 교차 통합 리스크 적대적 검증을 거쳐 구현했고, 실제 1,147장 jina-clip 인덱스에서
-네 기능 모두 검증했습니다.
+RAG / VectorDB / multi-agent / hybrid search / GraphDB / vLLM in a single release.
+Designed by five architects with adversarial verification of cross-integration risks,
+and validated on a live 1,147-image jina-clip index across all four features.
 
-### 하이브리드 검색 (벡터 + 키워드 RRF)
-- 기존 CLIP 코사인 검색에 **BM25 키워드 검색**(`rank-bm25`, 순수 파이썬)을 더해
-  **Reciprocal Rank Fusion**(k=60)으로 융합. 갤러리 헤더의 **검색 방식**(하이브리드/벡터/
-  키워드) 콤보로 즉시 전환.
-- `FolderHit.score`는 모든 모드에서 코사인을 유지(점수 임계값 필터 의미 보존), 정렬은
-  `fused_score`로, 매칭 출처는 `match`(벡터/키워드/둘다)로 표시.
-- BM25는 캡션의 클래스명("휴대폰 후면 카메라" 등)에 정확 매칭 — 빈번한 용어도 토큰 겹침
-  기반으로 후보 선정(Okapi IDF가 0/음수가 되어 흔한 용어가 누락되던 문제 회피).
-- 한국어 토크나이저는 koutil 재사용(조사 분리 + KO→EN 동의어). 키워드 인덱스는
-  스토어 write-revision으로 staleness 게이트 — 캡션 갱신/삭제 후 자동 재구축.
+### Hybrid search (vector + keyword RRF)
+- Adds **BM25 keyword search** (`rank-bm25`, pure Python) on top of the existing CLIP
+  cosine search, fused via **Reciprocal Rank Fusion** (k=60). Switch instantly between
+  Hybrid / Vector / Keyword in the gallery header's **search mode** combo.
+- `FolderHit.score` stays cosine in every mode (preserving the score-threshold filter's
+  meaning); ordering uses `fused_score`, and the match source is shown in `match`
+  (vector / keyword / both).
+- BM25 matches class names in captions exactly ("the rear camera of a phone", etc.) —
+  candidates are selected by token overlap even for frequent terms (avoiding the
+  Okapi-IDF-becomes-0/negative problem that dropped common terms).
+- The Korean tokenizer reuses koutil (particle splitting + KO→EN synonyms). The keyword
+  index is gated on the store's write-revision — it rebuilds automatically after caption
+  updates/deletes.
 
-### 임베디드 GraphDB (객체 공출현 그래프)
-- 데이터셋 YOLO 라벨로 **이미지–객체–폴더 그래프**를 구축. 두 백엔드를 한 프로토콜 뒤에:
-  **메모리**(순수 파이썬, 기본·의존성 없음)와 **kuzu**(임베디드 GraphDB, Cypher, `[graph]`
-  extra). kuzu 없으면 자동으로 메모리로 폴백.
-- 툴바 **객체 그래프** 다이얼로그: 클래스별 이미지 수, 선택 객체의 **동시 출현** 객체,
-  "선택 객체를 모두 포함한 이미지 보기"(AND) → 결과를 갤러리에 표시.
-- 그래프↔인덱스 조인은 항상 `image_id()`로(원본 경로 대소문자/슬래시 차이 무관),
-  루트 불일치 시 안전하게 필터 생략.
+### Embedded GraphDB (object co-occurrence graph)
+- Builds an **image–object–folder** graph from the dataset's YOLO labels. Two backends
+  behind one protocol: **memory** (pure Python, the dependency-free default) and **kuzu**
+  (embedded GraphDB, Cypher, the `[graph]` extra). Falls back to memory automatically if
+  kuzu is unavailable.
+- Toolbar **Object Graph** dialog: image count per class, objects that **co-occur** with a
+  selected object, and "show images containing all selected objects" (AND) → results in
+  the gallery.
+- Graph↔index joins always go through `image_id()` (independent of path case/separator),
+  and the filter is safely skipped on a root mismatch.
 
-### 인앱 멀티에이전트 검색 (A2A 파이프라인)
-- **계획 → 하이브리드 검색 → 그래프 필터 → 요약** 단계를 거치는 에이전트 검색. 각 단계
-  트레이스가 채팅창에 표시(`🧭 계획 / 🔍 검색 / 🕸 그래프 필터 / ✍ 요약`). 헤더 **에이전트**
-  토글로 켬.
-- 플래너는 질의를 의미 텍스트 + 필수/제외 객체로 분해. vLLM의 `plan()`(JSON) 사용,
-  실패 시 koutil 기반 규칙 플래너로 결정적 폴백 — mock 백엔드에서도 완전 동작.
-- 그래프 미구축/불일치 시 필터를 건너뛰고 하이브리드 결과 유지(빈 결과 방지).
+### In-app multi-agent search (A2A pipeline)
+- Agentic search that runs **plan → hybrid search → graph filter → summarize**, with each
+  step traced in the chat (`🧭 Plan / 🔍 Hybrid search / 🕸 Graph filter / ✍ Summary`). Enabled
+  with the header **Agent** toggle.
+- The planner decomposes a query into semantic text + required/excluded objects. It uses
+  vLLM's `plan()` (JSON) and falls back deterministically to the koutil rule-based planner
+  — fully functional even on the mock backend.
+- If the graph is unbuilt/mismatched, the filter is skipped and hybrid results are kept
+  (no empty results).
 
-### vLLM 실모드
-- `OpenAICompatChatLLM.plan()` 추가(견고한 JSON 파싱·코드펜스 제거·폴백).
-- `scripts/check_vllm.py` — 연결·refine·summarize·plan·(선택)caption 라운드트립을
-  PASS/FAIL로 점검.
+### vLLM real mode
+- Adds `OpenAICompatChatLLM.plan()` (robust JSON parsing, code-fence stripping, fallback).
+- `scripts/check_vllm.py` — checks the connect / refine / summarize / plan / (optional)
+  caption round-trips as PASS/FAIL.
 
-### 인프라/스레딩
-- 객체 그래프는 `GraphBuildWorker`로 백그라운드 빌드(인덱싱 후 자동 재구축). 에이전트
-  트레이스는 워커 `trace` 시그널 → GUI 스레드 큐 연결(위젯 크로스스레드 접근 없음).
-  종료 시 그래프 워커 드레인 + kuzu 락 해제.
-- 설정에 **객체 그래프 백엔드**(메모리/kuzu) 선택 추가.
+### Infrastructure / threading
+- The object graph builds in the background via `GraphBuildWorker` (rebuilt automatically
+  after indexing). The agent trace goes through the worker's `trace` signal → a queued
+  connection to the GUI thread (no cross-thread widget access). On shutdown, graph workers
+  are drained and the kuzu lock is released.
+- Adds an **object-graph backend** (memory/kuzu) choice in Settings.
 
-### 테스트
-- 60 → 83+개: 하이브리드(모드별 점수·출처·RRF·revision 재구축), 그래프(메모리/kuzu 동등성·
-  공출현·AND·빌더), 에이전트(플래너·그래프 필터·제외·불일치 폴백·콜백 스레드·plan 폴백).
+### Tests
+- 60 → 84: hybrid (per-mode score/source/RRF/revision rebuild), graph (memory/kuzu
+  parity, co-occurrence, AND, builder), agent (planner, graph filter, exclusion, mismatch
+  fallback, callback threading, plan fallback).
 
 ## v0.2.0 — 2026-06-12
 
-QC/QA · UI/UX · 성능 감사(멀티 에이전트 리뷰 + 교차 검증)를 거쳐 확정된 릴리스.
+A release finalized through QC/QA, UI/UX, and performance audits (multi-agent review +
+cross-verification).
 
-### 성능
-- **배치 임베딩**: 이미지 단위 인덱싱이 이미지를 32장씩 모아 한 번에 GPU로 임베딩
-  (기존: 1장씩 1,147회 호출). 실패한 행은 단건 재시도 후 건너뜀 목록에 기록.
-- **백그라운드 모델 로딩**: jina-clip 가중치 로드(10~40초)가 워커 스레드로 이동 —
-  창이 즉시 뜨고 상태바에 "모델 로딩 중…" 칩 표시, 완료 후 검색 가능.
-- **비동기 썸네일 프리워밍**: 인덱스 스레드에서 돌던 JPEG 디코드/저장을 별도
-  스레드풀로 분리 (인덱싱은 임베딩에 전념).
-- **설정 저장 최적화**: 백엔드 관련 설정이 안 바뀌면 모델을 다시 로드하지 않음
-  (top_k/썸네일 크기 변경이 수십 초 멈춤을 유발하던 문제 해결).
-- **갤러리 페인트 최적화**: 썸네일을 전달 시점에 1회 스케일 — hover/스크롤
-  리페인트는 단순 블릿.
-- **스토어 스캔 페이징**: `existing_mtimes()`가 5,000개 단위로 페이지 조회
-  (대형 인덱스에서 메모리 상한 고정), 캡션 갱신 경로의 중복 전체 스캔 1회 제거.
+### Performance
+- **Batched embedding**: per-image indexing now embeds images in batches of 32 in one GPU
+  call (was: 1,147 single-image calls). Failed rows are retried individually, then recorded
+  in the skip list.
+- **Background model loading**: the jina-clip weight load (10–40 s) moved to a worker thread
+  — the window opens instantly with a "Loading model…" chip in the status bar, and search
+  becomes available once it completes.
+- **Async thumbnail prewarming**: JPEG decode/save moved off the index thread into a separate
+  thread pool (so indexing focuses on embedding).
+- **Settings-save optimization**: the model is not reloaded when backend-related settings are
+  unchanged (fixing a multi-second stall on top_k / thumbnail-size changes).
+- **Gallery paint optimization**: thumbnails are scaled once on delivery — hover/scroll
+  repaints are a plain blit.
+- **Paged store scans**: `existing_mtimes()` pages in chunks of 5,000 (bounding memory on
+  large indexes) and removes one redundant full scan on the caption-refresh path.
 
-### 새 기능
-- **검색어 히스토리**: 입력창에서 ↑/↓로 이전 검색어 재호출 (앱 데이터에 JSON 저장, 200개).
-- **타일 우클릭 메뉴**: 이미지 보기 · 비슷한 이미지 검색 · 경로/폴더 경로/캡션 복사 · 탐색기 열기.
-- **비슷한 이미지 검색**: 저장된 임베딩을 재사용한 query-by-example — 모델 호출 없이 즉시.
-- **뷰어 YOLO 박스 오버레이**: B 키 또는 '라벨' 버튼으로 바운딩 박스+클래스명 표시
-  (클래스별 색상, 줌 무관 일정 두께).
-- **뷰어 결과 순서 탐색**: 이미지 단위 인덱스에서 ←/→가 검색 랭킹 순서로 이동,
-  하단에 `결과 12/48 · 점수 0.43 · 캡션` 표시.
-- **결과 수(k)·점수 임계값 컨트롤**: 갤러리 헤더에서 즉시 조절 — 임계값은 재검색 없이 필터.
-- **결과 내보내기**: CSV 저장(utf-8-sig, 엑셀 한글 호환) / 경로 목록 클립보드 복사.
-- **삭제 파일 자동 정리**: 증분 인덱싱이 디스크에서 사라진 파일의 레코드를 자동 삭제
-  (죽은 썸네일/깨진 '폴더 열기' 방지).
-- **인덱싱 오류 리포트**: 건너뛴 파일 목록을 완료 시 자세히 보기로 표시.
-- **인덱스 정보 다이얼로그**: 레코드 수 · 모델/차원/단위 · 마지막 빌드 시각/소요시간 ·
-  빌드 당시 데이터셋 경로(현재와 불일치 시 경고 + 재빌드 버튼) · 저장 공간.
-- **단축키**: F5 인덱스 업데이트, Ctrl+L 검색창 포커스, Enter 뷰어 열기,
-  Ctrl+C 경로 복사, Ctrl+E 탐색기 열기.
+### New features
+- **Query history**: recall previous queries with ↑/↓ in the input box (stored as JSON in the
+  app data, up to 200).
+- **Tile context menu**: view image · find similar images · copy path/folder path/caption ·
+  reveal in Explorer.
+- **Find similar images**: query-by-example reusing the stored embedding — instant, with no
+  model call.
+- **Viewer YOLO box overlay**: show bounding boxes + class names with the B key or the
+  "Labels" button (per-class color, zoom-independent thickness).
+- **Viewer ranked navigation**: on an image-granularity index, ←/→ move in search-ranking
+  order, with `Result 12/48 · score 0.43 · caption` shown at the bottom.
+- **Result count (k) / score-threshold controls**: adjust instantly in the gallery header —
+  the threshold filters without re-searching.
+- **Result export**: save CSV (utf-8-sig, Excel-friendly) / copy the path list to the
+  clipboard.
+- **Auto-prune deleted files**: incremental indexing removes records for files that vanished
+  from disk (preventing dead thumbnails / broken "open folder").
+- **Indexing error report**: the skipped-file list is shown under "details" on completion.
+- **Index info dialog**: record count · model/dimension/granularity · last build time/duration ·
+  the dataset path at build time (warns + offers rebuild on mismatch) · storage usage.
+- **Shortcuts**: F5 update index, Ctrl+L focus the search box, Enter open the viewer,
+  Ctrl+C copy path, Ctrl+E reveal in Explorer.
 
-### 버그 수정
-- 뷰어 휠 줌이 한 번 확대 후 스크롤로 바뀌던 문제 (viewport 이벤트 필터로 항상 줌).
-- 결과가 비워질 때 '폴더 열기' 버튼이 활성 상태로 남던 문제.
-- 인덱싱 중 '샘플 데이터셋 생성' 클릭 및 무음 무시되던 중복 빌드 요청에 안내 메시지.
-- 읽기 실패 이미지가 "이미지 로딩…"으로 영원히 남던 문제 → "썸네일 표시 불가" 표시.
-- 종료 시 썸네일 디코드가 멈춰 있으면 앱이 영원히 종료되지 않던 문제.
-- 설정: API 키 마스킹, embed_dim 상한 1024(jina-clip 호환), 주요 필드 툴팁.
-- 툴바가 아이콘 전용이라 빌드/재빌드를 구분하기 어렵던 문제
-  (텍스트 표시 + 재빌드 경고색).
-- 썸네일 캐시 동시 쓰기 경합 → 임시파일 + 원자적 교체로 방지.
-- 인덱싱 취소 시 "완료"로 표시되던 메시지 수정.
+### Bug fixes
+- Viewer wheel-zoom turned into scrolling after one zoom (now always zooms, via a viewport
+  event filter).
+- The "open folder" button stayed enabled when results were cleared.
+- Added guidance for clicking "Generate sample dataset" during indexing and for duplicate
+  build requests that were silently ignored.
+- Unreadable images stayed on "Loading image…" forever → now show "thumbnail unavailable".
+- The app could fail to ever exit if a thumbnail decode was wedged on shutdown.
+- Settings: API-key masking, an embed_dim cap of 1024 (jina-clip compatible), tooltips on key
+  fields.
+- The icon-only toolbar made build/rebuild hard to tell apart (text labels + a warning color
+  on rebuild).
+- Thumbnail-cache write races → prevented with a temp file + atomic replace.
+- Fixed a "complete" message shown when indexing was cancelled.
 
-### 테스트
-- 41 → 60개: config 영속성, 채팅 백엔드 장애 내성, query-by-example(저장 임베딩
-  재사용 증명), 배치 임베딩 호출 수/벡터 동일성, 삭제 레코드 정리, 점수 클램프,
-  스토어 페이징, update_meta 누락 id 등.
+### Tests
+- 41 → 60: config persistence, chat-backend fault tolerance, query-by-example (proving stored-
+  embedding reuse), batch-embedding call count/vector identity, deleted-record pruning, score
+  clamping, store paging, update_meta with missing ids, and more.
 
 ## v0.1.0 — 2026-06-10
 
-최초 릴리스: PySide6 GUI, ChromaDB 인덱스(폴더/이미지 단위), jina-clip-v2 한국어
-텍스트→이미지 검색, YOLO 라벨 캡션 + 사용자 클래스 이름(GUI/CLI/yaml), vLLM 어댑터,
-mock-first 설계.
+Initial release: PySide6 GUI, ChromaDB index (folder/image granularity), jina-clip-v2 Korean
+text→image search, YOLO-label captions + user class names (GUI/CLI/yaml), a vLLM adapter, and
+a mock-first design.

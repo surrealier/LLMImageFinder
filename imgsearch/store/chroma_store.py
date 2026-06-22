@@ -16,6 +16,9 @@ from typing import Optional, Sequence
 import numpy as np
 
 from imgsearch.core.models import FolderHit
+from imgsearch.logging_setup import get_logger
+
+log = get_logger("chroma_store")
 
 # 기본 컬렉션 이름. 폴더별 "대표(representative)" 레코드를 담는다는 의미.
 COLLECTION = "representatives"
@@ -185,7 +188,9 @@ class ChromaStore:
         """저장된 레코드 개수. 실패 시 0(검색을 빈 결과로 안전하게 단락시키기 위함)."""
         try:
             return int(self._col.count())
-        except Exception:
+        except Exception as e:
+            # 폴백(0)은 유지하되, 손상/잠금 등으로 '인덱스 비어 있음'처럼 보이는 원인을 로그로 남긴다.
+            log.warning("count() failed, treating store as empty: %s", e)
             return 0
 
     def all_ids(self) -> list[str]:
@@ -195,7 +200,8 @@ class ChromaStore:
         """
         try:
             return list(self._col.get(include=[]).get("ids", []))
-        except Exception:
+        except Exception as e:
+            log.warning("all_ids() failed, returning empty list: %s", e)
             return []
 
     def get_embedding(self, record_id: str) -> Optional[np.ndarray]:
@@ -206,7 +212,8 @@ class ChromaStore:
         """
         try:
             got = self._col.get(ids=[record_id], include=["embeddings"])
-        except Exception:
+        except Exception as e:
+            log.warning("get_embedding(%s) failed: %s", record_id, e)
             return None
         embs = got.get("embeddings")
         # 결과가 없거나 비어 있으면 None. (단일 조회라 len 체크로 충분)
@@ -226,8 +233,10 @@ class ChromaStore:
             batch = ids[i : i + _UPSERT_BATCH]
             try:
                 got = self._col.get(ids=batch, include=["embeddings"])
-            except Exception:
+            except Exception as e:
                 # 한 배치가 실패해도 나머지 배치는 계속 처리한다(부분 결과 허용).
+                # 다만 조용히 넘기지 않고 남겨, 일부 점수가 0으로 매겨지는 원인을 추적 가능하게 한다.
+                log.warning("get_embeddings batch [%d:%d] failed: %s", i, i + _UPSERT_BATCH, e)
                 continue
             embs = got.get("embeddings")
             # 주의: embs는 numpy ndarray일 수 있어 `embs or []`로 쓰면 "배열의 진리값이
@@ -257,8 +266,10 @@ class ChromaStore:
                 got = self._col.get(
                     include=["metadatas"], limit=self._SCAN_PAGE, offset=offset
                 )
-            except Exception:
+            except Exception as e:
                 # 중간에 실패하면 지금까지 모은 결과만 반환(부분 결과라도 증분 판단에 도움).
+                # 부분 결과는 일부 레코드가 재색인되게 만들 수 있으므로 경고로 남긴다.
+                log.warning("existing_mtimes() scan failed at offset %d (partial result): %s", offset, e)
                 return out
             ids = got.get("ids", [])
             for _id, md in zip(ids, got.get("metadatas", []) or []):

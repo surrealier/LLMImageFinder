@@ -1,9 +1,28 @@
 [project]
 name = "imgsearch"
-version = "0.3.0"
-description = "Search an image dataset by natural-language (Korean) using VLM captions, multilingual CLIP embeddings, ChromaDB RAG, and a PySide6 GUI."
+dynamic = ["version"]  # single source of truth: imgsearch/__init__.py:__version__
+description = "Find an image in your folder by describing it — local, offline-first natural-language image search (hybrid CLIP + BM25, object GraphDB, multi-agent RAG)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "surrealier" }]
+keywords = [
+    "image-search", "semantic-search", "rag", "vlm", "clip",
+    "chromadb", "hybrid-search", "graphdb", "pyside6", "multimodal",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics :: Viewers",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 dependencies = [
     "PySide6>=6.8",
     "qtawesome>=1.3",
@@ -39,9 +58,19 @@ dev = [
 [project.scripts]
 imgsearch = "imgsearch.app:main"
 
+[project.urls]
+Homepage = "https://github.com/surrealier/LLMImageFinder"
+Repository = "https://github.com/surrealier/LLMImageFinder"
+Issues = "https://github.com/surrealier/LLMImageFinder/issues"
+Changelog = "https://github.com/surrealier/LLMImageFinder/blob/master/CHANGELOG.md"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# Version is read from imgsearch/__init__.py so it can never drift from pyproject.
+[tool.hatch.version]
+path = "imgsearch/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["imgsearch"]

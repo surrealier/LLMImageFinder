@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-latest is the primary target; ubuntu guards cross-platform regressions.
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Qt 6 needs these system libs to load even its offscreen platform plugin on a
+      # bare Ubuntu runner (the PySide6 wheels don't ship libEGL/libGL/xkbcommon/etc.).
+      - name: Install Qt offscreen system libs (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1
+
+      - name: Sync (dev + graph extras, no heavy ML deps)
+        run: uv sync --extra dev --extra graph
+
+      - name: Run test suite
+        run: uv run --extra dev --extra graph pytest -q
+
+      - name: Offscreen GUI smoke test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: uv run python scripts/ui_smoke.py

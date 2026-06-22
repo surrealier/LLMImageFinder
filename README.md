@@ -13,8 +13,9 @@ Type a sentence like **"a motorcycle parked at night"** or **"fire and smoke"** 
   <img alt="jina-clip-v2" src="https://img.shields.io/badge/Embeddings-jina--clip--v2-5A4FCF" />
   <img alt="GraphDB" src="https://img.shields.io/badge/GraphDB-k%C3%B9zu-1D63ED" />
   <img alt="vLLM" src="https://img.shields.io/badge/LLM-vLLM%20(OpenAI--compatible)-009688" />
-  <img alt="Tests" src="https://img.shields.io/badge/tests-84%20passing-4E9F6D" />
-  <img alt="Version" src="https://img.shields.io/badge/version-0.3.0-blue" />
+  <a href="https://github.com/surrealier/LLMImageFinder/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/surrealier/LLMImageFinder/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="Tests" src="https://img.shields.io/badge/tests-90%20passing-4E9F6D" />
+  <img alt="Version" src="https://img.shields.io/badge/version-0.3.1-blue" />
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?logo=windows&logoColor=white" />
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-yellow.svg" />
 </p>
@@ -134,17 +135,18 @@ Everything above runs **deterministically on mock backends** with zero ML deps; 
 ## 🧪 Tests
 
 ```powershell
-uv run --extra dev pytest                 # 84 tests, mock backends, no models needed
+uv run --extra dev pytest                 # 90 tests, mock backends, no models needed
 uv run --extra dev --extra graph pytest   # + kùzu GraphDB parity tests
 uv run python scripts/ui_smoke.py         # offscreen GUI smoke
 ```
 
 ## 📚 Docs
 
-- 📐 **Architecture & design philosophy** (RAG · VectorDB · Hybrid · GraphDB · multi-agent · vLLM): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) *(written in Korean)*
+- 📐 **Architecture & design philosophy** (RAG · VectorDB · Hybrid · GraphDB · multi-agent · vLLM): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - 📝 **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
+- ⌨️ In-app: **Help → About** (version + links) and **Help → Keyboard shortcuts**.
 
-The UI and outputs are English; the source code is heavily commented in Korean.
+The UI, outputs, and docs are English; the source code is heavily commented in Korean.
 
 ## 📄 License
 

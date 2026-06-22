@@ -162,6 +162,27 @@ def main() -> None:
     print("graph dialog classes:", gdlg.class_list.count())
     gdlg.close()
 
+    # v0.3.1: About + Keyboard-shortcuts dialogs construct and show the current version
+    from imgsearch import __version__
+    from imgsearch.ui.about_dialog import build_about_dialog, build_shortcuts_dialog
+
+    adlg = build_about_dialog(win)
+    assert "About" in adlg.windowTitle(), adlg.windowTitle()
+    adlg.close()
+    sdlg = build_shortcuts_dialog(win)
+    assert "shortcuts" in sdlg.windowTitle().lower(), sdlg.windowTitle()
+    sdlg.close()
+    print("about/shortcuts dialogs constructed; version:", __version__)
+
+    # v0.3.1: empty-state overlay text is driven by store/search state
+    from imgsearch.ui.results_gallery import ResultsGallery
+
+    g = ResultsGallery()
+    g.set_empty_message("nothing here")
+    assert g.result_count() == 0
+    g.close()
+    print("empty-state gallery OK")
+
     win.close()
     print("\nUI SMOKE OK")
 

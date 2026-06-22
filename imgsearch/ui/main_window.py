@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QToolButton,
@@ -44,8 +45,11 @@ from imgsearch.index import labels
 from imgsearch.index.indexer import Indexer, image_id
 from imgsearch.paths import AppPaths
 from imgsearch.store.chroma_store import ChromaStore
+from imgsearch import __version__
 from imgsearch.thumbs import ensure_thumb
 from imgsearch.ui import icons
+from imgsearch.ui.about_dialog import show_about, show_shortcuts
+from imgsearch.ui.appicon import app_icon
 from imgsearch.ui.chat_widget import ChatWidget
 from imgsearch.ui.class_names_dialog import ClassNamesDialog
 from imgsearch.ui.graph_dialog import GraphDialog
@@ -132,9 +136,13 @@ class MainWindow(QMainWindow):
         self._build_t0 = 0.0  # 색인 시작 시각(소요 시간 기록용)
         self._last_hits: list = []  # 마지막 검색의 원본 결과(필터 전)
         self._display_hits: list = []  # 점수 임계값 필터를 거친 화면 표시용 결과
+        # 검색이 한 번이라도 실행됐는지 — 빈 상태 안내 문구를 '검색 결과 없음'으로 유지할지,
+        # 아니면 '첫 실행 가이드'로 되돌릴지 구분하는 데 쓴다(색인이 바뀌면 다시 False).
+        self._search_performed = False
         self._graph_runner: ThreadRunner | None = None
 
         self.setWindowTitle("LLMImageFinder — sLLM image search")
+        self.setWindowIcon(app_icon())  # 코드 생성 아이콘(타이틀바/작업표시줄)
         self.resize(1240, 820)
 
         # 벡터 스토어는 백엔드 선택과 무관하므로 한 번만 만든다(설정이 바뀌어도 재생성하지 않음).
@@ -248,7 +256,10 @@ class MainWindow(QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.act_index = tb.addAction(icons.index(), "Build / update index", self.start_index_update)
         self.act_index.setShortcut(QKeySequence("F5"))
-        self.act_index.setToolTip("Index only changed files and prune deleted records (F5)")
+        self.act_index.setToolTip(
+            "Index only changed files and prune deleted records (F5).\n"
+            "Your dataset is never modified — the index lives in the app-data folder."
+        )
         self.act_rebuild = tb.addAction(icons.rebuild(), "Full rebuild", self.start_full_rebuild)
         self.act_rebuild.setToolTip("Clear the whole index and re-index from scratch")
         tb.addSeparator()
@@ -256,9 +267,29 @@ class MainWindow(QMainWindow):
         tb.addAction(icons.graph(), "Object graph", self.show_object_graph)
         tb.addAction(icons.info(), "Index info", self.show_index_info)
         tb.addSeparator()
-        tb.addAction(icons.images(), "Generate sample dataset", self.make_sample)
+        act_sample = tb.addAction(icons.images(), "Generate sample dataset", self.make_sample)
+        act_sample.setToolTip(
+            "Create a small demo dataset (a few labeled scenes) so you can try search "
+            "immediately — no real data needed."
+        )
         tb.addSeparator()
         tb.addAction(icons.settings(), "Settings", self.open_settings)
+
+        # 도구 모음 오른쪽 끝으로 Help를 밀어내기 위한 신축성(expanding) 스페이서.
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        tb.addWidget(spacer)
+        # Help 버튼(드롭다운): 정보(About) + 키보드 단축키.
+        help_btn = QToolButton()
+        help_btn.setIcon(icons.info())
+        help_btn.setText(" Help")
+        help_btn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        help_btn.setPopupMode(QToolButton.InstantPopup)
+        hmenu = QMenu(help_btn)
+        hmenu.addAction("Keyboard shortcuts", lambda: show_shortcuts(self))
+        hmenu.addAction("About LLMImageFinder", lambda: show_about(self))
+        help_btn.setMenu(hmenu)
+        tb.addWidget(help_btn)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -295,14 +326,20 @@ class MainWindow(QMainWindow):
         # 저장된 cfg.search_mode에 해당하는 항목을 선택. 못 찾으면 0번(하이브리드)으로 폴백.
         cur = next((i for i, (_, d) in enumerate(_MODE_LABELS) if d == self.cfg.search_mode), 0)
         self.mode_combo.setCurrentIndex(cur)
-        self.mode_combo.setToolTip("Search mode — Hybrid (vector+keyword), Vector (semantic), Keyword (BM25)")
+        self.mode_combo.setToolTip(
+            "Search mode:\n"
+            "• Hybrid — meaning + exact terms (balanced, recommended)\n"
+            "• Vector — meaning only (semantic similarity)\n"
+            "• Keyword — exact words in captions/labels"
+        )
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         header.addWidget(self.mode_combo)
 
         self.agent_check = QCheckBox("Agent")
         self.agent_check.setChecked(bool(self.cfg.agentic_enabled))
         self.agent_check.setToolTip(
-            "Agentic search — plan → hybrid search → object-graph filter → summarize"
+            "Agentic search — plan → hybrid search → object-graph filter → summarize.\n"
+            "Each step is traced live in the chat. Best for complex, multi-object queries."
         )
         self.agent_check.toggled.connect(self._on_agentic_toggled)
         header.addWidget(self.agent_check)
@@ -366,6 +403,11 @@ class MainWindow(QMainWindow):
         self.statusBar().addWidget(self.status_msg, 1)
         self.model_chip = QLabel("")
         self.statusBar().addPermanentWidget(self.model_chip)
+        # 앱 버전 칩(단일 출처 __version__). 어떤 빌드를 쓰는지 한눈에 보이게.
+        version_chip = QLabel(f"v{__version__}")
+        version_chip.setStyleSheet("color:#6b7689; padding:0 8px;")
+        version_chip.setToolTip("LLMImageFinder version — see Help → About")
+        self.statusBar().addPermanentWidget(version_chip)
         self.progress = QProgressBar()
         self.progress.setMaximumWidth(320)
         self.progress.setVisible(False)
@@ -388,7 +430,7 @@ class MainWindow(QMainWindow):
         if not self.cfg.dataset_root:
             self.chat_widget.add_system(
                 "No dataset root is set. Choose a folder in the toolbar 'Settings', or "
-                "use 'Generate sample dataset' to create example data, then run 'Build index'."
+                "use 'Generate sample dataset' to create example data, then run 'Build / update index'."
             )
         # 저장된 인덱스가 '다른' 데이터셋 경로에서 만들어졌다면 경고(불일치한 결과 방지).
         meta = load_index_meta(self.paths.index_meta_file)
@@ -417,6 +459,31 @@ class MainWindow(QMainWindow):
         self.count_label.setText(f"Indexed {self._unit_label()}s: {n}")
         self.status_msg.setText(f"Ready · {n} indexed")
         self._update_model_chip()
+        self._update_idle_placeholder()
+
+    def _update_idle_placeholder(self) -> None:
+        """검색 결과가 없을 때(첫 실행 등) 갤러리 중앙에 띄울 안내 문구를 상태에 맞춰 설정한다.
+
+        표시 중인 결과 타일이 있으면 건드리지 않는다 — 안내는 어디까지나 '빈 화면'용이다.
+        """
+        if self.gallery.result_count() > 0:
+            return  # 결과가 떠 있으면 안내 문구를 바꾸지 않는다
+        if self._search_performed:
+            return  # 검색 직후의 '결과 없음' 안내 문구를 일반 안내로 덮어쓰지 않는다
+        if self.store.count() == 0:
+            # 첫 실행/색인 전: 다음에 무엇을 눌러야 하는지 분명히 알려 준다.
+            self.gallery.set_empty_message(
+                "No index yet.\n\n"
+                "Click “Generate sample dataset” in the toolbar to try it instantly,\n"
+                "or pick a folder in Settings — then run “Build / update index”."
+            )
+        else:
+            # 색인은 있는데 아직 검색을 안 한 상태: 어떻게 검색하는지 안내.
+            self.gallery.set_empty_message(
+                "Ready to search.\n\n"
+                "Describe an image in the chat on the left —\n"
+                "for example, “a person and a motorcycle at night”."
+            )
 
     # ---------------------------------------------------------------- 검색
     def _ready_for_query(self) -> bool:
@@ -483,6 +550,7 @@ class MainWindow(QMainWindow):
             return
         finally:
             QGuiApplication.restoreOverrideCursor()  # 예외가 나도 커서는 반드시 복구
+        self._search_performed = True
         self._last_hits = list(result.hits)
         self._apply_display_filter()
         self.chat_widget.add_assistant(
@@ -501,6 +569,18 @@ class MainWindow(QMainWindow):
         self._display_hits = hits
         self.gallery.set_results(hits)
         self.export_btn.setEnabled(bool(hits))  # 표시할 결과가 있을 때만 내보내기 허용
+        # 결과가 0개일 때 갤러리 중앙에 띄울 안내 문구를 상황에 맞게 설정한다.
+        if not hits:
+            if self._last_hits:
+                # 검색은 됐지만 점수 임계값에 다 걸러진 경우 — 임계값을 낮추라고 안내.
+                self.gallery.set_empty_message(
+                    "All results are below the “Score ≥” threshold.\nLower it to see them."
+                )
+            else:
+                # 검색 결과 자체가 0개인 경우 — 임계값/모드/표현을 바꿔 보라고 안내.
+                self.gallery.set_empty_message(
+                    "No matches.\n\nLower “Score ≥”, switch search mode, or try different wording."
+                )
         # 필터로 일부가 가려졌으면 "표시 N / 검색 M"으로, 아니면 "검색 결과: N개"로 카운트 표기.
         if self._last_hits and len(hits) != len(self._last_hits):
             self.count_label.setText(f"Showing {len(hits)} / {len(self._last_hits)} found")
@@ -509,6 +589,7 @@ class MainWindow(QMainWindow):
 
     def _on_query_done(self, result) -> None:
         """검색 워커 완료 콜백 — 결과를 저장/표시하고 요약을 채팅에 출력, busy 해제."""
+        self._search_performed = True  # 이후 빈 상태는 '첫 실행 가이드'가 아니라 '결과 없음' 안내로
         self._last_hits = list(result.hits)
         self._apply_display_filter()
         if result.hits:
@@ -516,7 +597,9 @@ class MainWindow(QMainWindow):
                 result.summary or f"Found {len(result.hits)} related results."
             )
         else:
-            self.chat_widget.add_system("No matching results. Try different wording.")
+            self.chat_widget.add_system(
+                "No matches. Lower the “Score ≥” threshold, switch search mode, or try different wording."
+            )
         self.chat_widget.set_busy(False)  # 입력창/전송 버튼 다시 활성화
         self.status_msg.setText("Ready")
         self._query_runner = None  # 다음 검색을 허용
@@ -628,6 +711,7 @@ class MainWindow(QMainWindow):
             return
         for h in hits:
             h.match = "graph"  # 출처 배지를 'G'(그래프)로 표시 + 점수 필터에서 제외되도록 표시
+        self._search_performed = True
         self._last_hits = hits
         self._apply_display_filter()
         if len(hits) < len(paths):
@@ -862,6 +946,8 @@ class MainWindow(QMainWindow):
         """색인 완료 콜백 — refresh/build 두 모드를 분기 처리하고 후속 작업(그래프 재빌드 등)을 잇는다."""
         was_refresh = self._index_mode == "refresh"
         self._finish_index_ui()
+        # 색인이 바뀌었으니 직전 '결과 없음' 안내는 낡았다 → 첫 실행 가이드로 되돌릴 수 있게 리셋.
+        self._search_performed = False
         self._refresh_status()
         # 문서/라벨이 바뀌었으므로 BM25 어휘 인덱스와 객체 그래프는 이제 낡았다 → 무효화.
         self.service.invalidate_lexical()

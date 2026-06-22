@@ -6,4 +6,4 @@ Runs fully in a deterministic MOCK mode with zero ML dependencies; real backends
 (jina-clip-v2 embedder, vLLM-served Qwen2.5-VL) activate from the Settings panel.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.1"
